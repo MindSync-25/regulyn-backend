@@ -1,0 +1,60 @@
+# EditorConfig for DPDP Compliance Platform
+# https://editorconfig.org
+
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Java files
+[*.java]
+indent_size = 4
+max_line_length = 120
+continuation_indent_size = 8
+
+# XML files (Maven, Spring configs)
+[*.{xml,xsd}]
+indent_size = 2
+
+# YAML files
+[*.{yml,yaml}]
+indent_size = 2
+
+# JSON files
+[*.json]
+indent_size = 2
+
+# Properties files
+[*.properties]
+indent_size = 4
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Shell scripts
+[*.sh]
+indent_size = 2
+end_of_line = lf
+
+# Dockerfile
+[Dockerfile*]
+indent_size = 2
+
+# SQL files
+[*.sql]
+indent_size = 2
+
+# Maven wrapper
+[mvnw]
+end_of_line = lf
+
+[mvnw.cmd]
+end_of_line = crlf

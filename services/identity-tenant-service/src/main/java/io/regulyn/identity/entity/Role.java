@@ -30,8 +30,8 @@ public class Role {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(name = "created_by", length = 255)
-    private String createdBy;
+    @Column(name = "created_by")
+    private UUID createdBy;
 
     @PrePersist
     protected void onCreate() {
@@ -82,11 +82,11 @@ public class Role {
         this.createdAt = createdAt;
     }
 
-    public String getCreatedBy() {
+    public UUID getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(String createdBy) {
+    public void setCreatedBy(UUID createdBy) {
         this.createdBy = createdBy;
     }
 }

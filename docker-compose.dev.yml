@@ -12,7 +12,7 @@ services:
       POSTGRES_DB: regulyn
       POSTGRES_MULTIPLE_DATABASES: identity,consent,ropa,dsar,retention,incident,nominee,guardian,vendor,employee,evidence,notification
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/local/postgres/init-scripts:/docker-entrypoint-initdb.d

@@ -39,7 +39,7 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
-        user.setCreatedBy(context.getUserId().toString());
+        user.setCreatedBy(context.getUserId());
 
         user = userRepository.save(user);
 

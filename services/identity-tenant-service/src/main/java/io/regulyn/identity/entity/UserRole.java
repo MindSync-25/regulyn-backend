@@ -30,8 +30,8 @@ public class UserRole {
     @Column(name = "assigned_at", nullable = false, updatable = false)
     private Instant assignedAt;
 
-    @Column(name = "assigned_by", length = 255)
-    private String assignedBy;
+    @Column(name = "assigned_by")
+    private UUID assignedBy;
 
     @PrePersist
     protected void onCreate() {
@@ -113,11 +113,11 @@ public class UserRole {
         this.assignedAt = assignedAt;
     }
 
-    public String getAssignedBy() {
+    public UUID getAssignedBy() {
         return assignedBy;
     }
 
-    public void setAssignedBy(String assignedBy) {
+    public void setAssignedBy(UUID assignedBy) {
         this.assignedBy = assignedBy;
     }
 }

@@ -5,6 +5,7 @@ CREATE TABLE roles (
     role_name VARCHAR(100) NOT NULL,
     description TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
     CONSTRAINT fk_roles_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id),
     CONSTRAINT uq_roles_tenant_name UNIQUE (tenant_id, role_name)
 );

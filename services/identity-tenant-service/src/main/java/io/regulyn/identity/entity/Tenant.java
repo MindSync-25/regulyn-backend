@@ -25,14 +25,14 @@ public class Tenant {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(name = "created_by", length = 255)
-    private String createdBy;
+    @Column(name = "created_by")
+    private UUID createdBy;
 
     @Column(name = "updated_at")
     private Instant updatedAt;
 
-    @Column(name = "updated_by", length = 255)
-    private String updatedBy;
+    @Column(name = "updated_by")
+    private UUID updatedBy;
 
     @PrePersist
     protected void onCreate() {
@@ -84,11 +84,11 @@ public class Tenant {
         this.createdAt = createdAt;
     }
 
-    public String getCreatedBy() {
+    public UUID getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(String createdBy) {
+    public void setCreatedBy(UUID createdBy) {
         this.createdBy = createdBy;
     }
 
@@ -100,11 +100,11 @@ public class Tenant {
         this.updatedAt = updatedAt;
     }
 
-    public String getUpdatedBy() {
+    public UUID getUpdatedBy() {
         return updatedBy;
     }
 
-    public void setUpdatedBy(String updatedBy) {
+    public void setUpdatedBy(UUID updatedBy) {
         this.updatedBy = updatedBy;
     }
 }

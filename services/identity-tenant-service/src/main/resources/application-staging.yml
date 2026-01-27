@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+
+otel:
+  enabled: true
+
+# TODO: AWS Secrets Manager integration
+# AWS Secrets Manager ARN: arn:aws:secretsmanager:ap-south-1:ACCOUNT:secret:regulyn/staging/db
+# KMS Key ID: alias/regulyn-staging-key

@@ -1,0 +1,16 @@
+server:
+  port: 8093
+spring:
+  application:
+    name: connector-service
+regulyn:
+  jwt:
+    secret: ${JWT_SECRET:default-secret-key-change-in-production}
+  observability:
+    otel:
+      enabled: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

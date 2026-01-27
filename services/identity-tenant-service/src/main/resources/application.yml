@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: identity-tenant-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:change-me-in-production-this-must-be-at-least-256-bits-long}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+# OpenTelemetry Configuration
+otel:
+  enabled: ${OTEL_ENABLED:false}

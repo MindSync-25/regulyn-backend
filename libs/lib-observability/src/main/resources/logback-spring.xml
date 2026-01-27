@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+  
+  <property name="CONSOLE_LOG_PATTERN" 
+    value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [tenantId=%X{tenantId:-NONE}] [traceId=%X{traceId:-NONE}] [requestId=%X{requestId:-NONE}] - %msg%n"/>
+  
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+      <charset>utf8</charset>
+    </encoder>
+  </appender>
+  
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+  
+  <logger name="com.regulyn" level="DEBUG"/>
+  <logger name="org.springframework.web" level="INFO"/>
+  <logger name="org.springframework.security" level="INFO"/>
+</configuration>

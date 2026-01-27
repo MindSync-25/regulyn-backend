@@ -1,16 +1,30 @@
-server:
-  port: 8093
 spring:
   application:
     name: connector-service
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+server:
+  port: 8093
+
 regulyn:
   jwt:
     secret: ${JWT_SECRET:default-secret-key-change-in-production}
   observability:
     otel:
       enabled: false
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,prometheus,metrics

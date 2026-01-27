@@ -1,8 +1,31 @@
+spring:
+  application:
+    name: evidence-reporting-service
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
 server:
-  port: 8083
+  port: 8095
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
+
+evidence:
+  storage:
+    localDir: ./data/evidence

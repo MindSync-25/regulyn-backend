@@ -38,15 +38,24 @@ public class AuthService {
     }
 
     public LoginResponse login(LoginRequest request) {
+        System.out.println("DEBUG: Login attempt for email: " + request.getEmail());
+        System.out.println("DEBUG: Password provided: " + (request.getPassword() != null ? "***" : "NULL"));
+        
         // Find user by email across all tenants
         User user = userRepository.findAll().stream()
             .filter(u -> u.getEmail().equals(request.getEmail()))
             .findFirst()
-            .orElseThrow(() -> new RuntimeException("Invalid credentials"));
+            .orElseThrow(() -> new RuntimeException("Invalid credentials - user not found"));
 
+        System.out.println("DEBUG: User found: " + user.getUserId());
+        System.out.println("DEBUG: Password hash from DB: " + (user.getPasswordHash() != null ? user.getPasswordHash().substring(0, 10) + "..." : "NULL"));
+        
         // Verify password
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid credentials");
+        boolean passwordMatches = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
+        System.out.println("DEBUG: Password matches: " + passwordMatches);
+        
+        if (!passwordMatches) {
+            throw new RuntimeException("Invalid credentials - password mismatch");
         }
 
         // Check if user is enabled

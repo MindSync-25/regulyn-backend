@@ -11,7 +11,7 @@ INSERT INTO tenants (tenant_id, name, status) VALUES
 -- Generated with: BCryptPasswordEncoder().encode("admin123")
 INSERT INTO users (user_id, tenant_id, email, password_hash, first_name, last_name, enabled) VALUES
     ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 
-     'admin@local.test', '$2a$10$N9qo8uLOickgx2ZMRZoMye1K8aLKI5WLkqFZr5FhZ5LHWz3gFUyPu', 
+     'admin@local.test', '$2b$10$jZcKTIUhwshERcFgGtJMaOTkGEEDRtRMgJ/LHq5lEvUUGeWa20x9W', 
      'Admin', 'User', true);
 
 INSERT INTO roles (role_id, tenant_id, role_name, description) VALUES

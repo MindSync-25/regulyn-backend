@@ -1,6 +1,9 @@
 spring:
   application:
     name: evidence-reporting-service
+  datasource:
+    hikari:
+      connection-init-sql: SET search_path TO evidence
   jpa:
     hibernate:
       ddl-auto: validate
@@ -31,3 +34,5 @@ management:
 evidence:
   storage:
     localDir: ./data/evidence
+  export:
+    baseDir: ./data/evidence-exports

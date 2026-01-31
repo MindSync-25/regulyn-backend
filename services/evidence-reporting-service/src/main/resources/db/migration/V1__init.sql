@@ -15,22 +15,24 @@ CREATE TABLE service_meta (
 
 -- Evidence records table (metadata about evidence)
 CREATE TABLE evidence_records (
-    evidence_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    evidence_pk UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
+    evidence_id TEXT NOT NULL UNIQUE,
+    evidence_type TEXT NOT NULL,
+    evidence_hash TEXT NOT NULL,
+    metadata JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_by UUID,
-    payload_hash TEXT NOT NULL,
-    payload_json JSONB NOT NULL,
-    storage_backend TEXT NOT NULL DEFAULT 'LOCAL_FS'
+    created_by UUID
 );
 
-CREATE INDEX idx_evidence_records_tenant ON evidence_records(tenant_id, created_at DESC);
-CREATE INDEX idx_evidence_records_hash ON evidence_records(payload_hash);
+CREATE INDEX idx_evidence_tenant ON evidence_records(tenant_id);
+CREATE INDEX idx_evidence_id ON evidence_records(evidence_id);
+CREATE INDEX idx_evidence_created ON evidence_records(created_at DESC);
 
 -- Evidence artifacts table (files attached to evidence)
 CREATE TABLE evidence_artifacts (
     artifact_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    evidence_id UUID NOT NULL REFERENCES evidence_records(evidence_id),
+    evidence_id TEXT NOT NULL REFERENCES evidence_records(evidence_id),
     tenant_id UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     filename TEXT NOT NULL,

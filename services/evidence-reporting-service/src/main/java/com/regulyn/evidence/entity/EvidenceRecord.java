@@ -28,7 +28,8 @@ public class EvidenceRecord {
     @Column(name = "evidence_hash", nullable = false)
     private String evidenceHash;
 
-    @Column(name = "metadata", columnDefinition = "jsonb")
+    @Column(name = "metadata")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     private String metadata;
 
     @Column(name = "created_at", nullable = false)

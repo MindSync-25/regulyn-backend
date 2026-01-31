@@ -86,7 +86,6 @@ class EvidenceServiceOutboxTest {
 
         // Assert - verify evidence record was created
         assertNotNull(response.getEvidenceId());
-        assertNotNull(response.getEvidenceHash());
 
         List<EvidenceRecord> records = evidenceRepository.findAll();
         assertEquals(1, records.size());

@@ -66,6 +66,19 @@ public class DsarRequestEntity {
     @Column(name = "close_evidence_bundle_id")
     private UUID closeEvidenceBundleId;
     
+    @Column(name = "close_notes")
+    private String closeNotes;
+    
+    @Column(name = "idempotency_key")
+    private String idempotencyKey;
+    
+    @Column(name = "details_json", nullable = false)
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String detailsJson = "{}";
+    
+    @Column(name = "sla_breached", nullable = false)
+    private Boolean slaBreached = false;
+    
     @Column(name = "metadata")
     @JdbcTypeCode(SqlTypes.JSON)
     private String metadata = "{}";
@@ -234,5 +247,37 @@ public class DsarRequestEntity {
 
     public void setMetadata(String metadata) {
         this.metadata = metadata;
+    }
+
+    public String getCloseNotes() {
+        return closeNotes;
+    }
+
+    public void setCloseNotes(String closeNotes) {
+        this.closeNotes = closeNotes;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getDetailsJson() {
+        return detailsJson;
+    }
+
+    public void setDetailsJson(String detailsJson) {
+        this.detailsJson = detailsJson;
+    }
+
+    public Boolean getSlaBreached() {
+        return slaBreached;
+    }
+
+    public void setSlaBreached(Boolean slaBreached) {
+        this.slaBreached = slaBreached;
     }
 }

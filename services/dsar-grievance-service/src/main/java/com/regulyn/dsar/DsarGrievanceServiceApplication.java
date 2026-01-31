@@ -4,12 +4,16 @@ import com.regulyn.events.config.EventsAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EntityScan(basePackages = {"com.regulyn.dsar", "com.regulyn.events.outbox"})
 @EnableJpaRepositories(basePackages = {"com.regulyn.dsar", "com.regulyn.events.outbox"})
+@ComponentScan(basePackages = {"com.regulyn.dsar", "com.regulyn.common"})
+@EnableScheduling
 @Import(EventsAutoConfiguration.class)
 public class DsarGrievanceServiceApplication {
   public static void main(String[] args) {

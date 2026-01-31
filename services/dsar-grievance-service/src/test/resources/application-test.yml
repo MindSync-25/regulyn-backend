@@ -1,0 +1,18 @@
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+dsar:
+  sla:
+    scheduler:
+      enabled: false
+
+logging:
+  level:
+    com.regulyn: DEBUG
+    org.hibernate.SQL: DEBUG

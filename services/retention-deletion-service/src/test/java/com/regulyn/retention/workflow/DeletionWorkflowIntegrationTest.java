@@ -42,11 +42,13 @@ public class DeletionWorkflowIntegrationTest {
         request.setTenantId(UUID.randomUUID());
         request.setSubjectId(UUID.randomUUID());
         request.setSubjectType("USER");
-        request.setStatus("PENDING");
+        request.setEntityType("CUSTOMER");
+        request.setSource("ADMIN");
+        request.setStatus("REQUESTED");
 
         DeletionRequest saved = deletionRequestRepository.save(request);
 
-        assertThat(saved.getId()).isNotNull();
+        assertThat(saved.getDeletionId()).isNotNull();
         assertThat(saved.getDueAt()).isNotNull();
         assertThat(saved.getDueAt()).isAfter(Instant.now());
     }

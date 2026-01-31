@@ -44,11 +44,26 @@ public class DeletionStatusHistory {
     }
 
     public UUID getHistoryId() { return historyId; }
+    public void setHistoryId(UUID historyId) { this.historyId = historyId; }
+
     public UUID getDeletionId() { return deletionId; }
+    public void setDeletionId(UUID deletionId) { this.deletionId = deletionId; }
+
     public UUID getTenantId() { return tenantId; }
+    public void setTenantId(UUID tenantId) { this.tenantId = tenantId; }
+
     public String getFromStatus() { return fromStatus; }
+    public void setFromStatus(String fromStatus) { this.fromStatus = fromStatus; }
+
     public String getToStatus() { return toStatus; }
+    public void setToStatus(String toStatus) { this.toStatus = toStatus; }
+
     public Instant getChangedAt() { return changedAt; }
+    public void setChangedAt(Instant changedAt) { this.changedAt = changedAt; }
+
     public UUID getChangedBy() { return changedBy; }
+    public void setChangedBy(UUID changedBy) { this.changedBy = changedBy; }
+
     public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
 }

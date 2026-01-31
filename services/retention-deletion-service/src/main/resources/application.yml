@@ -21,3 +21,16 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+# Evidence service integration and storage
+evidence:
+  service:
+    url: http://localhost:8083
+  storage:
+    localDir: ./data/deletion-proofs
+
+# Retention scheduler
+retention:
+  scheduler:
+    enabled: true
+    cron: "0 0 0 * * ?"  # Daily at midnight

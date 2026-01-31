@@ -1,6 +1,8 @@
 package com.regulyn.dsar.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -36,6 +38,37 @@ public class DsarRequestEntity {
 
     @Column(name = "created_by")
     private UUID createdBy;
+    
+    @Column(name = "data_principal_id")
+    private UUID dataPrincipalId;
+    
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+    
+    @Column(name = "due_at", nullable = false)
+    private Instant dueAt;
+    
+    @Column(name = "assigned_to")
+    private UUID assignedTo;
+    
+    @Column(name = "requires_approval")
+    private Boolean requiresApproval = false;
+    
+    @Column(name = "approved_by")
+    private UUID approvedBy;
+    
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+    
+    @Column(name = "closed_at")
+    private Instant closedAt;
+    
+    @Column(name = "close_evidence_bundle_id")
+    private UUID closeEvidenceBundleId;
+    
+    @Column(name = "metadata")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String metadata = "{}";
 
     @PrePersist
     protected void onCreate() {
@@ -45,6 +78,17 @@ public class DsarRequestEntity {
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+        if (updatedAt == null) {
+            updatedAt = Instant.now();
+        }
+        if (dueAt == null) {
+            dueAt = Instant.now().plusSeconds(90L * 24 * 60 * 60); // 90 days
+        }
+    }
+    
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = Instant.now();
     }
 
     // Getters and setters
@@ -110,5 +154,85 @@ public class DsarRequestEntity {
 
     public void setCreatedBy(UUID createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public UUID getDataPrincipalId() {
+        return dataPrincipalId;
+    }
+
+    public void setDataPrincipalId(UUID dataPrincipalId) {
+        this.dataPrincipalId = dataPrincipalId;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public Instant getDueAt() {
+        return dueAt;
+    }
+
+    public void setDueAt(Instant dueAt) {
+        this.dueAt = dueAt;
+    }
+
+    public UUID getAssignedTo() {
+        return assignedTo;
+    }
+
+    public void setAssignedTo(UUID assignedTo) {
+        this.assignedTo = assignedTo;
+    }
+
+    public Boolean getRequiresApproval() {
+        return requiresApproval;
+    }
+
+    public void setRequiresApproval(Boolean requiresApproval) {
+        this.requiresApproval = requiresApproval;
+    }
+
+    public UUID getApprovedBy() {
+        return approvedBy;
+    }
+
+    public void setApprovedBy(UUID approvedBy) {
+        this.approvedBy = approvedBy;
+    }
+
+    public Instant getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(Instant approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public Instant getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(Instant closedAt) {
+        this.closedAt = closedAt;
+    }
+
+    public UUID getCloseEvidenceBundleId() {
+        return closeEvidenceBundleId;
+    }
+
+    public void setCloseEvidenceBundleId(UUID closeEvidenceBundleId) {
+        this.closeEvidenceBundleId = closeEvidenceBundleId;
+    }
+
+    public String getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(String metadata) {
+        this.metadata = metadata;
     }
 }

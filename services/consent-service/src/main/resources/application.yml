@@ -1,6 +1,10 @@
 spring:
   application:
     name: consent-service
+  datasource:
+    url: ${spring.datasource.url:jdbc:postgresql://localhost:5432/consent}
+    hikari:
+      connection-init-sql: SET search_path TO consent
   jpa:
     hibernate:
       ddl-auto: validate

@@ -9,9 +9,11 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   flyway:
     enabled: true
     baseline-on-migrate: true
+    schemas: connector
 
 server:
   port: 8093
@@ -22,6 +24,8 @@ regulyn:
   observability:
     otel:
       enabled: false
+  evidence:
+    baseUrl: ${EVIDENCE_SERVICE_URL:http://localhost:8083}
 
 management:
   endpoints:

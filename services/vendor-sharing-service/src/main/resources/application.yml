@@ -12,6 +12,7 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    schemas: vendor
 
 server:
   port: 8090
@@ -21,3 +22,7 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+evidence:
+  service:
+    url: http://localhost:8083

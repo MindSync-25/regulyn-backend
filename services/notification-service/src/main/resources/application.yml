@@ -12,6 +12,8 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    schemas: notification
+    locations: classpath:db/migration
 
 server:
   port: 8092

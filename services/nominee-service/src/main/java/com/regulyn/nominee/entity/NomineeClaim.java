@@ -42,6 +42,15 @@ public class NomineeClaim {
     @Column(name = "closed_at")
     private Instant closedAt;
 
+    @Column(name = "approval_decision")
+    private String approvalDecision;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    @Column(name = "evidence_id")
+    private UUID evidenceId;
+
     @Column(name = "metadata")
     @JdbcTypeCode(SqlTypes.JSON)
     private String metadata = "{}";
@@ -86,6 +95,15 @@ public class NomineeClaim {
 
     public Instant getClosedAt() { return closedAt; }
     public void setClosedAt(Instant closedAt) { this.closedAt = closedAt; }
+
+    public String getApprovalDecision() { return approvalDecision; }
+    public void setApprovalDecision(String approvalDecision) { this.approvalDecision = approvalDecision; }
+
+    public String getRejectionReason() { return rejectionReason; }
+    public void setRejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; }
+
+    public UUID getEvidenceId() { return evidenceId; }
+    public void setEvidenceId(UUID evidenceId) { this.evidenceId = evidenceId; }
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }

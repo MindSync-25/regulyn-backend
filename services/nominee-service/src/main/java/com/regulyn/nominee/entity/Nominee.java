@@ -36,6 +36,21 @@ public class Nominee {
     @Column(name = "verified_at")
     private Instant verifiedAt;
 
+    @Column(name = "relationship")
+    private String relationship;
+
+    @Column(name = "scope")
+    private String scope;
+
+    @Column(name = "verification_method")
+    private String verificationMethod;
+
+    @Column(name = "disabled_at")
+    private Instant disabledAt;
+
+    @Column(name = "disabled_by")
+    private UUID disabledBy;
+
     @Column(name = "metadata")
     @JdbcTypeCode(SqlTypes.JSON)
     private String metadata = "{}";
@@ -74,6 +89,21 @@ public class Nominee {
 
     public Instant getVerifiedAt() { return verifiedAt; }
     public void setVerifiedAt(Instant verifiedAt) { this.verifiedAt = verifiedAt; }
+
+    public String getRelationship() { return relationship; }
+    public void setRelationship(String relationship) { this.relationship = relationship; }
+
+    public String getScope() { return scope; }
+    public void setScope(String scope) { this.scope = scope; }
+
+    public String getVerificationMethod() { return verificationMethod; }
+    public void setVerificationMethod(String verificationMethod) { this.verificationMethod = verificationMethod; }
+
+    public Instant getDisabledAt() { return disabledAt; }
+    public void setDisabledAt(Instant disabledAt) { this.disabledAt = disabledAt; }
+
+    public UUID getDisabledBy() { return disabledBy; }
+    public void setDisabledBy(UUID disabledBy) { this.disabledBy = disabledBy; }
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }

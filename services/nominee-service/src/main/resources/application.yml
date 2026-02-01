@@ -1,6 +1,11 @@
 spring:
   application:
     name: nominee-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/regulyn}
+    username: ${DATABASE_USERNAME:regulyn_user}
+    password: ${DATABASE_PASSWORD:regulyn_pass}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: validate
@@ -9,12 +14,19 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        default_schema: nominee
   flyway:
     enabled: true
     baseline-on-migrate: true
+    schemas: nominee
+    default-schema: nominee
+    locations: classpath:db/migration
 
 server:
   port: 8088
+
+evidence:
+  baseUrl: ${EVIDENCE_BASE_URL:http://localhost:8083}
 
 management:
   endpoints:

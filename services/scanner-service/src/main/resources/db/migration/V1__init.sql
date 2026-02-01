@@ -1,7 +1,28 @@
 -- Create schema
 CREATE SCHEMA IF NOT EXISTS scanner;
 
--- Set search path
+-- Audit events table (created in public schema for lib-common AuditWriter)
+CREATE TABLE IF NOT EXISTS audit_events (
+    event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    actor_id UUID,
+    actor_type TEXT,
+    service TEXT NOT NULL DEFAULT 'scanner-service',
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    payload_hash TEXT,
+    evidence_id UUID,
+    metadata JSONB
+);
+
+-- Indexes for audit_events (in public schema)
+CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_occurred ON audit_events(tenant_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_entity ON audit_events(tenant_id, entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_action ON audit_events(tenant_id, action);
+
+-- Set search path for service-specific tables
 SET search_path TO scanner;
 
 -- Service metadata table
@@ -12,27 +33,6 @@ CREATE TABLE service_meta (
     name TEXT NOT NULL,
     version TEXT NOT NULL
 );
-
--- Audit events table
-CREATE TABLE audit_events (
-    event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    actor_id UUID,
-    actor_type TEXT,
-    service TEXT NOT NULL DEFAULT 'scanner-service',
-    action TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id UUID,
-    payload_hash TEXT,
-    evidence_id UUID,
-    metadata JSONB
-);
-
--- Indexes for audit_events
-CREATE INDEX idx_audit_events_tenant_occurred ON audit_events(tenant_id, occurred_at);
-CREATE INDEX idx_audit_events_tenant_entity ON audit_events(tenant_id, entity_type, entity_id);
-CREATE INDEX idx_audit_events_tenant_action ON audit_events(tenant_id, action);
 
 -- Insert service metadata
 INSERT INTO service_meta (id, tenant_id, created_at, name, version)

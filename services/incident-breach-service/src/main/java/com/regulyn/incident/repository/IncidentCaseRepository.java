@@ -21,6 +21,10 @@ public interface IncidentCaseRepository extends JpaRepository<IncidentCase, UUID
 
     Page<IncidentCase> findByTenantIdAndStatus(UUID tenantId, String status, Pageable pageable);
 
-    @Query("SELECT i FROM IncidentCase i WHERE i.notifyDueAt < :now AND i.closedAt IS NULL")
+    Page<IncidentCase> findByTenantIdAndSeverity(UUID tenantId, String severity, Pageable pageable);
+
+    Page<IncidentCase> findByTenantIdAndStatusAndSeverity(UUID tenantId, String status, String severity, Pageable pageable);
+
+    @Query("SELECT i FROM IncidentCase i WHERE i.notifyDueAt < :now AND i.status != 'NOTIFIED' AND i.notifyOverdue = false")
     List<IncidentCase> findOverdueIncidents(Instant now);
 }

@@ -9,12 +9,23 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        default_schema: incident
   flyway:
     enabled: true
     baseline-on-migrate: true
+    schemas: incident
 
 server:
   port: 8087
+
+evidence:
+  service:
+    url: ${EVIDENCE_SERVICE_URL:http://localhost:8086}
+
+notification:
+  service:
+    url: ${NOTIFICATION_SERVICE_URL:http://localhost:8088}
+    stub: ${NOTIFICATION_SERVICE_STUB:true}
 
 management:
   endpoints:

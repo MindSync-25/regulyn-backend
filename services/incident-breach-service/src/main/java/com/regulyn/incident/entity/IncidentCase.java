@@ -51,6 +51,18 @@ public class IncidentCase {
     @Column(name = "closed_at")
     private Instant closedAt;
 
+    @Column(name = "summary")
+    private String summary;
+
+    @Column(name = "closure_notes")
+    private String closureNotes;
+
+    @Column(name = "evidence_bundle_id")
+    private UUID evidenceBundleId;
+
+    @Column(name = "notify_overdue", nullable = false)
+    private Boolean notifyOverdue = false;
+
     @Column(name = "metadata")
     @JdbcTypeCode(SqlTypes.JSON)
     private String metadata = "{}";
@@ -115,6 +127,18 @@ public class IncidentCase {
 
     public Instant getClosedAt() { return closedAt; }
     public void setClosedAt(Instant closedAt) { this.closedAt = closedAt; }
+
+    public String getSummary() { return summary; }
+    public void setSummary(String summary) { this.summary = summary; }
+
+    public String getClosureNotes() { return closureNotes; }
+    public void setClosureNotes(String closureNotes) { this.closureNotes = closureNotes; }
+
+    public UUID getEvidenceBundleId() { return evidenceBundleId; }
+    public void setEvidenceBundleId(UUID evidenceBundleId) { this.evidenceBundleId = evidenceBundleId; }
+
+    public Boolean getNotifyOverdue() { return notifyOverdue; }
+    public void setNotifyOverdue(Boolean notifyOverdue) { this.notifyOverdue = notifyOverdue; }
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }

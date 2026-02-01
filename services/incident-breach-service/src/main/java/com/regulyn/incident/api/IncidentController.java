@@ -30,7 +30,7 @@ public class IncidentController {
     
     @PostMapping("/{incidentId}/tasks")
     public ResponseEntity<CreateTaskResponse> createTask(
-            @PathVariable UUID incidentId,
+            @PathVariable("incidentId") UUID incidentId,
             @Valid @RequestBody CreateTaskRequest request) {
         CreateTaskResponse response = incidentService.createTask(incidentId, request);
         return ResponseEntity.ok(response);
@@ -38,7 +38,7 @@ public class IncidentController {
     
     @PostMapping("/{incidentId}/transition")
     public ResponseEntity<TransitionResponse> transitionStatus(
-            @PathVariable UUID incidentId,
+            @PathVariable("incidentId") UUID incidentId,
             @Valid @RequestBody TransitionRequest request) {
         TransitionResponse response = incidentService.transitionStatus(incidentId, request);
         return ResponseEntity.ok(response);
@@ -46,7 +46,7 @@ public class IncidentController {
     
     @PostMapping("/{incidentId}/notifications/draft")
     public ResponseEntity<DraftNotificationResponse> draftNotification(
-            @PathVariable UUID incidentId,
+            @PathVariable("incidentId") UUID incidentId,
             @Valid @RequestBody DraftNotificationRequest request) {
         DraftNotificationResponse response = incidentService.draftNotification(incidentId, request);
         return ResponseEntity.ok(response);
@@ -54,8 +54,8 @@ public class IncidentController {
     
     @PostMapping("/{incidentId}/notifications/{notificationId}/approve")
     public ResponseEntity<ApproveNotificationResponse> approveNotification(
-            @PathVariable UUID incidentId,
-            @PathVariable UUID notificationId,
+            @PathVariable("incidentId") UUID incidentId,
+            @PathVariable("notificationId") UUID notificationId,
             @RequestBody ApproveNotificationRequest request) {
         ApproveNotificationResponse response = incidentService.approveNotification(incidentId, notificationId, request);
         return ResponseEntity.ok(response);
@@ -63,22 +63,22 @@ public class IncidentController {
     
     @PostMapping("/{incidentId}/notifications/{notificationId}/send")
     public ResponseEntity<SendNotificationResponse> sendNotification(
-            @PathVariable UUID incidentId,
-            @PathVariable UUID notificationId) {
+            @PathVariable("incidentId") UUID incidentId,
+            @PathVariable("notificationId") UUID notificationId) {
         SendNotificationResponse response = incidentService.sendNotification(incidentId, notificationId);
         return ResponseEntity.ok(response);
     }
     
     @PostMapping("/{incidentId}/close")
     public ResponseEntity<CloseIncidentResponse> closeIncident(
-            @PathVariable UUID incidentId,
+            @PathVariable("incidentId") UUID incidentId,
             @RequestBody CloseIncidentRequest request) {
         CloseIncidentResponse response = incidentService.closeIncident(incidentId, request);
         return ResponseEntity.ok(response);
     }
     
     @GetMapping("/{incidentId}")
-    public ResponseEntity<IncidentDetailsResponse> getIncident(@PathVariable UUID incidentId) {
+    public ResponseEntity<IncidentDetailsResponse> getIncident(@PathVariable("incidentId") UUID incidentId) {
         IncidentDetailsResponse response = incidentService.getIncidentDetails(incidentId);
         return ResponseEntity.ok(response);
     }

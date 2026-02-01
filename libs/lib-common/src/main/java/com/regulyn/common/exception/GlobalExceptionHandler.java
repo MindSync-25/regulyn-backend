@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 @RestControllerAdvice
@@ -49,6 +50,23 @@ public class GlobalExceptionHandler {
     );
     
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+  }
+  
+  @ExceptionHandler(ResponseStatusException.class)
+  public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex, HttpServletRequest request) {
+    HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+    logger.warn("Response status exception ({}): {}", status, ex.getReason());
+    
+    ErrorResponse error = new ErrorResponse(
+      status.value(),
+      status.getReasonPhrase(),
+      ex.getReason() != null ? ex.getReason() : status.getReasonPhrase(),
+      request.getRequestURI(),
+      MDC.get("requestId"),
+      MDC.get("tenantId")
+    );
+    
+    return ResponseEntity.status(status).body(error);
   }
   
   @ExceptionHandler(RuntimeException.class)

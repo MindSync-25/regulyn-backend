@@ -11,19 +11,27 @@ import com.regulyn.incident.repository.IncidentCaseRepository;
 import com.regulyn.incident.repository.IncidentNotificationRepository;
 import com.regulyn.incident.repository.IncidentTaskRepository;
 import com.regulyn.incident.service.IncidentOverdueScheduler;
+import jakarta.servlet.*;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.*;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
 
@@ -35,6 +43,58 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class IncidentWorkflowComprehensiveTest {
+
+    @TestConfiguration
+    static class TestSecurityConfig {
+        @Bean
+        public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+            http
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+            return http.build();
+        }
+        
+        @Bean
+        public FilterRegistrationBean<TestTenantFilter> testTenantFilter() {
+            FilterRegistrationBean<TestTenantFilter> registrationBean = new FilterRegistrationBean<>();
+            registrationBean.setFilter(new TestTenantFilter());
+            registrationBean.addUrlPatterns("/*");
+            registrationBean.setOrder(1);
+            return registrationBean;
+        }
+    }
+    
+    static class TestTenantFilter implements Filter {
+        @Override
+        public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+                throws IOException, ServletException {
+            try {
+                HttpServletRequest httpRequest = (HttpServletRequest) request;
+                String tenantIdHeader = httpRequest.getHeader("X-Tenant-ID");
+                String actorIdHeader = httpRequest.getHeader("X-Actor-ID");
+                String actorRoleHeader = httpRequest.getHeader("X-Actor-Role");
+                
+                TenantContext context = new TenantContext();
+                context.setRequestId(UUID.randomUUID().toString());
+                context.setTraceId(UUID.randomUUID().toString());
+                
+                if (tenantIdHeader != null && !tenantIdHeader.isBlank()) {
+                    context.setTenantId(UUID.fromString(tenantIdHeader));
+                }
+                if (actorIdHeader != null && !actorIdHeader.isBlank()) {
+                    context.setUserId(UUID.fromString(actorIdHeader));
+                }
+                if (actorRoleHeader != null && !actorRoleHeader.isBlank()) {
+                    context.setRoles(Set.of(actorRoleHeader));
+                }
+                
+                TenantContextHolder.setContext(context);
+                chain.doFilter(request, response);
+            } finally {
+                TenantContextHolder.clear();
+            }
+        }
+    }
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
@@ -418,6 +478,7 @@ class IncidentWorkflowComprehensiveTest {
         // Arrange - create incident with past notify_due_at
         IncidentCase incident = new IncidentCase();
         incident.setTenantId(testTenantId);
+        incident.setIncidentType("DATA_BREACH");
         incident.setSeverity("HIGH");
         incident.setStatus("OPENED");
         incident.setSummary("Overdue test incident");

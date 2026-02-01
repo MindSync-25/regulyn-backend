@@ -81,6 +81,7 @@ public class IncidentService {
         
         IncidentCase incident = new IncidentCase();
         incident.setTenantId(tenantId);
+        incident.setIncidentType("DATA_BREACH");  // Set incident type (currently defaulting to DATA_BREACH)
         incident.setSeverity(request.severity());
         incident.setStatus("OPENED");
         incident.setSummary(request.summary());

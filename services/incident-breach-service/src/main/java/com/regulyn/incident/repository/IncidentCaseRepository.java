@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -26,5 +27,5 @@ public interface IncidentCaseRepository extends JpaRepository<IncidentCase, UUID
     Page<IncidentCase> findByTenantIdAndStatusAndSeverity(UUID tenantId, String status, String severity, Pageable pageable);
 
     @Query("SELECT i FROM IncidentCase i WHERE i.notifyDueAt < :now AND i.status != 'NOTIFIED' AND i.notifyOverdue = false")
-    List<IncidentCase> findOverdueIncidents(Instant now);
+    List<IncidentCase> findOverdueIncidents(@Param("now") Instant now);
 }

@@ -24,7 +24,7 @@ public class AuditWriter {
     private static final Logger log = LoggerFactory.getLogger(AuditWriter.class);
     
     private static final String INSERT_SQL = """
-        INSERT INTO audit_events (
+        INSERT INTO incident.audit_events (
             event_id, tenant_id, occurred_at, actor_id, actor_type, 
             service, action, entity_type, entity_id, payload_hash, 
             evidence_id, metadata

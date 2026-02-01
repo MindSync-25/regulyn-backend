@@ -4,21 +4,18 @@
 SET search_path TO incident;
 
 CREATE TABLE IF NOT EXISTS audit_events (
-    audit_id UUID PRIMARY KEY,
+    event_id UUID PRIMARY KEY,
     tenant_id UUID NOT NULL,
-    actor_id UUID NOT NULL,
-    actor_type VARCHAR(50) NOT NULL,
-    service VARCHAR(50) NOT NULL,
+    occurred_at TIMESTAMP NOT NULL,
+    actor_id UUID,
+    actor_type VARCHAR(50),
+    service VARCHAR(100) NOT NULL,
     action VARCHAR(100) NOT NULL,
     entity_type VARCHAR(50) NOT NULL,
     entity_id UUID NOT NULL,
-    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     payload_hash VARCHAR(64),
-    description TEXT,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    request_id VARCHAR(100),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    evidence_id UUID,
+    metadata JSONB
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_tenant_occurred ON audit_events(tenant_id, occurred_at DESC);

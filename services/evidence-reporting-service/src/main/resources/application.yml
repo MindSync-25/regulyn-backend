@@ -31,6 +31,9 @@ management:
       exposure:
         include: health,info,metrics
 
+audit:
+  schema: evidence
+
 evidence:
   storage:
     localDir: ./data/evidence

@@ -19,6 +19,9 @@ spring:
     baseline-on-migrate: true
     schemas: consent
 
+audit:
+  schema: consent
+
 server:
   port: 8082
 

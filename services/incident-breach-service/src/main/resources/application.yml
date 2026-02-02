@@ -15,6 +15,9 @@ spring:
     baseline-on-migrate: true
     schemas: incident
 
+audit:
+  schema: incident
+
 server:
   port: 8087
 

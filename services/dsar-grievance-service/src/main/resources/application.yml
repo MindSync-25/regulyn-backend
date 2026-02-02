@@ -31,6 +31,9 @@ evidence:
   service:
     url: http://localhost:8095
 
+audit:
+  schema: dsar
+
 dsar:
   sla:
     scheduler:

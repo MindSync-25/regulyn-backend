@@ -23,14 +23,7 @@ public class AuditWriter {
     
     private static final Logger log = LoggerFactory.getLogger(AuditWriter.class);
     
-    private static final String INSERT_SQL = """
-        INSERT INTO incident.audit_events (
-            event_id, tenant_id, occurred_at, actor_id, actor_type, 
-            service, action, entity_type, entity_id, payload_hash, 
-            evidence_id, metadata
-        ) VALUES (?, ?, ?, ?, ?::text, ?, ?, ?, ?, ?, ?, ?::jsonb)
-        """;
-    
+    private final String insertSql;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final String serviceName;
@@ -38,10 +31,18 @@ public class AuditWriter {
     public AuditWriter(
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
-            @Value("${spring.application.name:unknown-service}") String serviceName) {
+            @Value("${spring.application.name:unknown-service}") String serviceName,
+            @Value("${audit.schema:public}") String auditSchema) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.serviceName = serviceName;
+        this.insertSql = String.format("""
+            INSERT INTO %s.audit_events (
+                event_id, tenant_id, occurred_at, actor_id, actor_type, 
+                service, action, entity_type, entity_id, payload_hash, 
+                evidence_id, metadata
+            ) VALUES (?, ?, ?, ?, ?::text, ?, ?, ?, ?, ?, ?, ?::jsonb)
+            """, auditSchema);
     }
     
     /**
@@ -58,7 +59,7 @@ public class AuditWriter {
                 metadataJson.setValue("{}");
             }
             
-            jdbcTemplate.update(INSERT_SQL,
+            jdbcTemplate.update(insertSql,
                     event.getEventId(),
                     event.getTenantId(),
                     Timestamp.from(event.getTimestamp()),

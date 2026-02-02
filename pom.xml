@@ -21,6 +21,7 @@
     <flyway.version>10.4.1</flyway.version>
     <jjwt.version>0.12.5</jjwt.version>
     <opentelemetry.version>1.34.1</opentelemetry.version>
+    <aws-sdk.version>2.20.26</aws-sdk.version>
   </properties>
 
   <modules>
@@ -55,6 +56,13 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
         <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws-sdk.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>

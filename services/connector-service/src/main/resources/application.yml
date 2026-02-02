@@ -1,12 +1,16 @@
 spring:
   application:
     name: connector-service
+  datasource:
+    hikari:
+      connection-init-sql: SET search_path TO connector
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
+        default_schema: connector
         jdbc:
           time_zone: UTC
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -14,6 +18,9 @@ spring:
     enabled: true
     baseline-on-migrate: true
     schemas: connector
+  cache:
+    type: simple
+    cache-names: connector-credentials
 
 server:
   port: 8093
@@ -32,3 +39,29 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+
+# Connector-specific configuration
+connector:
+  # Credential resolver type: ENV, LOCAL_DB_ENCRYPTED, AWS_SECRETS_MANAGER
+  credentials:
+    resolver: ${CONNECTOR_CREDENTIAL_RESOLVER:LOCAL_DB_ENCRYPTED}
+  
+  # Scheduler configuration
+  scheduler:
+    poll-interval-ms: ${CONNECTOR_SCHEDULER_POLL_INTERVAL:30000}
+    enabled: ${CONNECTOR_SCHEDULER_ENABLED:true}
+
+# AWS Secrets Manager configuration
+aws:
+  secrets:
+    enabled: ${AWS_SECRETS_ENABLED:false}
+    region: ${AWS_REGION:us-east-1}
+    # Optional: Set for LocalStack or custom endpoint (e.g., http://localhost:4566)
+    endpointOverride: ${AWS_SECRETS_ENDPOINT_OVERRIDE:}
+    cacheTtlSeconds: ${AWS_SECRETS_CACHE_TTL:300}
+    # Fail closed: throw exception if AWS resolution fails (no fallback)
+    failClosed: ${AWS_SECRETS_FAIL_CLOSED:true}
+
+# Audit configuration
+audit:
+  schema: connector

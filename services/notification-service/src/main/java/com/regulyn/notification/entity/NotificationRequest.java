@@ -56,6 +56,10 @@ public class NotificationRequest {
     @Column(name = "total_recipients", nullable = false)
     private Integer totalRecipients;
     
+    @Enumerated(EnumType.STRING)
+    @Column(name = "message_category", nullable = false, length = 50)
+    private MessageCategory messageCategory = MessageCategory.MARKETING;
+    
     @Column(name = "sent_count", nullable = false)
     private Integer sentCount = 0;
     
@@ -168,6 +172,14 @@ public class NotificationRequest {
     
     public void setTotalRecipients(Integer totalRecipients) {
         this.totalRecipients = totalRecipients;
+    }
+    
+    public MessageCategory getMessageCategory() {
+        return messageCategory;
+    }
+    
+    public void setMessageCategory(MessageCategory messageCategory) {
+        this.messageCategory = messageCategory;
     }
     
     public Integer getSentCount() {

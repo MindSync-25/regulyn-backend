@@ -14,6 +14,17 @@ spring:
     baseline-on-migrate: true
     schemas: notification
     locations: classpath:db/migration
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:false}
+          starttls:
+            enable: ${SMTP_STARTTLS:false}
 
 server:
   port: 8092
@@ -23,3 +34,30 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+# Notification Service Configuration
+notification:
+  # SMTP Email Provider
+  smtp:
+    enabled: ${NOTIFICATION_SMTP_ENABLED:false}
+    from-address: ${NOTIFICATION_FROM_ADDRESS:noreply@regulyn.com}
+    from-name: ${NOTIFICATION_FROM_NAME:Regulyn Notifications}
+  
+  # Local Log Provider (development)
+  local-log:
+    enabled: ${NOTIFICATION_LOCAL_LOG_ENABLED:true}
+  
+  # Consent Service Integration
+  consent:
+    enabled: ${NOTIFICATION_CONSENT_ENABLED:true}
+    service-url: ${CONSENT_SERVICE_URL:http://consent-service:8080}
+  
+  # Evidence Service Integration
+  evidence:
+    enabled: ${NOTIFICATION_EVIDENCE_ENABLED:true}
+    service-url: ${EVIDENCE_SERVICE_URL:http://evidence-reporting-service:8080}
+  
+  # Webhook Security (for delivery callbacks)
+  webhook:
+    secret: ${NOTIFICATION_WEBHOOK_SECRET:}
+    signature-header: ${NOTIFICATION_WEBHOOK_SIGNATURE_HEADER:X-Webhook-Signature}

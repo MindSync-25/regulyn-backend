@@ -14,10 +14,10 @@ import java.util.UUID;
  * Used for development and testing.
  */
 @Component
-@ConditionalOnProperty(prefix = "notification.local-log", name = "enabled", havingValue = "true", matchIfMissing = true)
-public class LocalLogProvider implements NotificationProvider {
+@ConditionalOnProperty(prefix = "notification.smtp", name = "enabled", havingValue = "false", matchIfMissing = true)
+public class LocalLogProviderUpdated implements NotificationProvider {
     
-    private static final Logger logger = LoggerFactory.getLogger(LocalLogProvider.class);
+    private static final Logger logger = LoggerFactory.getLogger(LocalLogProviderUpdated.class);
     
     @Override
     public ProviderSendResult send(String recipientAddress, String subject, String body, String format) {
@@ -31,11 +31,10 @@ public class LocalLogProvider implements NotificationProvider {
         logger.info("=".repeat(80));
         
         String messageId = UUID.randomUUID().toString();
-        
         return ProviderSendResult.success(
             messageId,
             "LOCAL_LOG",
-            Map.of("loggedAt", System.currentTimeMillis() + "")
+            Map.of("logged", "true", "recipientAddress", recipientAddress)
         );
     }
     

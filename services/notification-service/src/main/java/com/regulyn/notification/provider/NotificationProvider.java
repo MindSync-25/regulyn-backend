@@ -3,14 +3,14 @@ package com.regulyn.notification.provider;
 public interface NotificationProvider {
     
     /**
-     * Send notification to recipient with enhanced result tracking
+     * Send notification to recipient
      * @param recipientAddress Email address, phone number, or WhatsApp ID
      * @param subject Message subject (for email)
      * @param body Message body
      * @param format TEXT or HTML
-     * @return ProviderSendResult with success status, provider message ID, and metadata
+     * @return true if sent successfully, false otherwise
      */
-    ProviderSendResult send(String recipientAddress, String subject, String body, String format);
+    boolean send(String recipientAddress, String subject, String body, String format);
     
     /**
      * Get provider channel type

@@ -2,11 +2,7 @@ package com.regulyn.notification.provider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * Local logging provider for EMAIL channel.
@@ -14,13 +10,12 @@ import java.util.UUID;
  * Used for development and testing.
  */
 @Component
-@ConditionalOnProperty(prefix = "notification.local-log", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class LocalLogProvider implements NotificationProvider {
     
     private static final Logger logger = LoggerFactory.getLogger(LocalLogProvider.class);
     
     @Override
-    public ProviderSendResult send(String recipientAddress, String subject, String body, String format) {
+    public boolean send(String recipientAddress, String subject, String body, String format) {
         logger.info("=".repeat(80));
         logger.info("[LOCAL EMAIL NOTIFICATION]");
         logger.info("To: {}", recipientAddress);
@@ -30,13 +25,7 @@ public class LocalLogProvider implements NotificationProvider {
         logger.info("Body:\n{}", body);
         logger.info("=".repeat(80));
         
-        String messageId = UUID.randomUUID().toString();
-        
-        return ProviderSendResult.success(
-            messageId,
-            "LOCAL_LOG",
-            Map.of("loggedAt", System.currentTimeMillis() + "")
-        );
+        return true; // Always succeeds
     }
     
     @Override

@@ -10,7 +10,6 @@ import com.regulyn.notification.dto.SendNotificationResponse;
 import com.regulyn.notification.entity.NotificationDispatchLog;
 import com.regulyn.notification.entity.NotificationRequest;
 import com.regulyn.notification.provider.NotificationProvider;
-import com.regulyn.notification.provider.ProviderSendResult;
 import com.regulyn.notification.repository.NotificationDispatchLogRepository;
 import com.regulyn.notification.repository.NotificationRequestRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -215,8 +214,7 @@ public class NotificationSendService {
             .orElseThrow(() -> new IllegalStateException("No provider for channel: " + channel));
         
         // Send notification
-        ProviderSendResult result = provider.send(recipientAddress, finalSubject, finalBody, languageVariant.format());
-        boolean sent = result.success();
+        boolean sent = provider.send(recipientAddress, finalSubject, finalBody, languageVariant.format());
         
         // Log dispatch
         NotificationDispatchLog log = new NotificationDispatchLog();

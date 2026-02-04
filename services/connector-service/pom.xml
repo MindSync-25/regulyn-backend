@@ -99,21 +99,6 @@
       <version>3.3.1</version>
       <scope>test</scope>
     </dependency>
-    <!-- AWS SDK v2 for Secrets Manager -->
-    <dependency>
-      <groupId>software.amazon.awssdk</groupId>
-      <artifactId>secretsmanager</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>software.amazon.awssdk</groupId>
-      <artifactId>auth</artifactId>
-    </dependency>
-    <!-- LocalStack for testing -->
-    <dependency>
-      <groupId>org.testcontainers</groupId>
-      <artifactId>localstack</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>

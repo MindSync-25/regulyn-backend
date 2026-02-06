@@ -327,8 +327,43 @@ public class ConnectorRunWorker {
             outbox.setNextAttemptAt(Instant.now());
 
             outboxEventRepository.saveAndFlush(outbox);
+
+            writeAuditEvent(eventType, run, payloadJson);
         } catch (Exception e) {
             logger.error("Failed to emit run event {} for run {}", eventType, run.getId(), e);
+        }
+    }
+
+    private void writeAuditEvent(String action, ConnectorRun run, String payloadJson) {
+        try {
+            String sql = """
+                INSERT INTO connector.audit_events (
+                    event_id, tenant_id, occurred_at, actor_id, actor_type, service,
+                    action, entity_type, entity_id, payload_hash, evidence_id, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                """;
+
+            UUID eventId = UUID.randomUUID();
+            java.sql.Timestamp nowTs = java.sql.Timestamp.from(Instant.now());
+            String payloadHash = Integer.toString(payloadJson.hashCode());
+
+            jdbcTemplate.update(
+                    sql,
+                    eventId,
+                    run.getTenantId(),
+                    nowTs,
+                    null,
+                    "SYSTEM",
+                    "connector-service",
+                    action,
+                    "CONNECTOR_RUN",
+                    run.getId().toString(),
+                    payloadHash,
+                    null,
+                    payloadJson
+            );
+        } catch (Exception e) {
+            logger.error("Failed to write audit event {} for run {}", action, run.getId(), e);
         }
     }
 

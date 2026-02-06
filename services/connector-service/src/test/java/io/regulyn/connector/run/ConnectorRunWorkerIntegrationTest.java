@@ -99,6 +99,14 @@ class ConnectorRunWorkerIntegrationTest extends AbstractIntegrationTestBase {
         assertTrue(events.stream().anyMatch(e -> "RUN_STARTED".equals(e.getEventType())));
         assertTrue(events.stream().anyMatch(e -> "RUN_SUCCEEDED".equals(e.getEventType())));
         assertTrue(events.stream().anyMatch(e -> "RUN_EVIDENCE_STORED".equals(e.getEventType())));
+
+        Integer auditCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM connector.audit_events WHERE entity_type='CONNECTOR_RUN' AND entity_id=?",
+            Integer.class,
+            run.getId().toString()
+        );
+        assertNotNull(auditCount);
+        assertTrue(auditCount >= 1);
     }
 
     @Test
@@ -121,6 +129,14 @@ class ConnectorRunWorkerIntegrationTest extends AbstractIntegrationTestBase {
         List<OutboxEvent> events = outboxRepository.findByEntityTypeAndEntityIdOrderByOccurredAtAsc(
                 "CONNECTOR_RUN", run.getId().toString());
         assertTrue(events.stream().anyMatch(e -> "RUN_FAILED_RETRYABLE".equals(e.getEventType())));
+
+        Integer auditCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM connector.audit_events WHERE entity_type='CONNECTOR_RUN' AND entity_id=? AND action='RUN_FAILED_RETRYABLE'",
+            Integer.class,
+            run.getId().toString()
+        );
+        assertNotNull(auditCount);
+        assertTrue(auditCount >= 1);
     }
 
     @Test
@@ -143,6 +159,14 @@ class ConnectorRunWorkerIntegrationTest extends AbstractIntegrationTestBase {
                 "CONNECTOR_RUN", run.getId().toString());
         assertTrue(events.stream().anyMatch(e -> "RUN_FAILED_TERMINAL".equals(e.getEventType())));
         assertTrue(events.stream().anyMatch(e -> "RUN_EVIDENCE_STORED".equals(e.getEventType())));
+
+        Integer auditCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM connector.audit_events WHERE entity_type='CONNECTOR_RUN' AND entity_id=? AND action='RUN_FAILED_TERMINAL'",
+            Integer.class,
+            run.getId().toString()
+        );
+        assertNotNull(auditCount);
+        assertTrue(auditCount >= 1);
     }
 
     @Test
@@ -183,6 +207,14 @@ class ConnectorRunWorkerIntegrationTest extends AbstractIntegrationTestBase {
         List<OutboxEvent> events = outboxRepository.findByEntityTypeAndEntityIdOrderByOccurredAtAsc(
                 "CONNECTOR_RUN", run.getId().toString());
         assertTrue(events.stream().anyMatch(e -> "RUN_STUCK_RETRYABLE".equals(e.getEventType())));
+
+        Integer auditCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM connector.audit_events WHERE entity_type='CONNECTOR_RUN' AND entity_id=? AND action='RUN_STUCK_RETRYABLE'",
+            Integer.class,
+            run.getId().toString()
+        );
+        assertNotNull(auditCount);
+        assertTrue(auditCount >= 1);
     }
 
     @Test

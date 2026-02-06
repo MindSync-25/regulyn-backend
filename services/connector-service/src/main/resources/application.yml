@@ -10,6 +10,7 @@ spring:
         jdbc:
           time_zone: UTC
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: connector
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -26,6 +27,19 @@ regulyn:
       enabled: false
   evidence:
     baseUrl: ${EVIDENCE_SERVICE_URL:http://localhost:8083}
+
+connector:
+  credentials:
+    encryption:
+      key: ${CONNECTOR_ENCRYPTION_KEY:}
+    aws:
+      enabled: ${AWS_SECRETS_ENABLED:false}
+      region: ${AWS_REGION:us-east-1}
+      secrets-endpoint: ${AWS_SECRETS_ENDPOINT:}
+      access-key: ${AWS_ACCESS_KEY:}
+      secret-key: ${AWS_SECRET_KEY:}
+  scheduler:
+    batch-size: ${SCHEDULER_BATCH_SIZE:50}
 
 management:
   endpoints:

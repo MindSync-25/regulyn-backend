@@ -60,6 +60,9 @@ public class ConnectorRun {
     @Column(name = "last_error_message", columnDefinition = "TEXT")
     private String lastErrorMessage;
 
+    @Column(name = "evidence_artifact_ref", length = 128)
+    private String evidenceArtifactRef;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -211,6 +214,14 @@ public class ConnectorRun {
 
     public void setLastErrorMessage(String lastErrorMessage) {
         this.lastErrorMessage = lastErrorMessage;
+    }
+
+    public String getEvidenceArtifactRef() {
+        return evidenceArtifactRef;
+    }
+
+    public void setEvidenceArtifactRef(String evidenceArtifactRef) {
+        this.evidenceArtifactRef = evidenceArtifactRef;
     }
 
     public Instant getCreatedAt() {

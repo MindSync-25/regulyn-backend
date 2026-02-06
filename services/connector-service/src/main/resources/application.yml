@@ -40,6 +40,9 @@ connector:
       secret-key: ${AWS_SECRET_KEY:}
   scheduler:
     batch-size: ${SCHEDULER_BATCH_SIZE:50}
+  run-worker:
+    batch-size: ${RUN_WORKER_BATCH_SIZE:50}
+    stuck-timeout-minutes: ${RUN_WORKER_STUCK_TIMEOUT_MINUTES:15}
 
 management:
   endpoints:

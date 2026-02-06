@@ -2,6 +2,7 @@ package io.regulyn.connector.repository;
 
 import io.regulyn.connector.model.ConnectorRun;
 import io.regulyn.connector.model.ConnectorRun.RunStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -35,6 +36,16 @@ public interface ConnectorRunRepository extends JpaRepository<ConnectorRun, UUID
      * @return List of recent runs
      */
     List<ConnectorRun> findByTenantIdAndConnectorIdOrderByCreatedAtDesc(UUID tenantId, UUID connectorId);
+
+    /**
+     * Find recent runs for a connector with paging.
+     */
+    List<ConnectorRun> findByConnectorIdOrderByCreatedAtDesc(UUID connectorId, Pageable pageable);
+
+    /**
+     * Find stuck runs that have been RUNNING since before the given time.
+     */
+    List<ConnectorRun> findByStatusAndStartedAtBefore(RunStatus status, Instant beforeTime);
 
     /**
      * Count runs for a schedule within a time window (for idempotency check).

@@ -54,6 +54,9 @@ public abstract class AbstractIntegrationTestBase {
         
         // Disable scheduled tasks in tests to avoid background interference
         registry.add("spring.task.scheduling.enabled", () -> "false");
+
+        // Encryption key for credential tests
+        registry.add("connector.credentials.encryption.key", () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
         
         // HikariCP connection pool - increased for full test suite
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> "20");
@@ -64,6 +67,7 @@ public abstract class AbstractIntegrationTestBase {
         registry.add("spring.datasource.hikari.leak-detection-threshold", () -> "60000");
         
         // Evidence service (mock endpoint)
+        registry.add("regulyn.evidence.baseUrl", () -> "http://localhost:9999");
         registry.add("evidence.baseUrl", () -> "http://localhost:9999");
     }
 }

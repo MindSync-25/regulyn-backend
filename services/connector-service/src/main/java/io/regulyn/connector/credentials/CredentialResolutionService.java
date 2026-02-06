@@ -6,6 +6,7 @@ import com.regulyn.events.outbox.OutboxEvent;
 import com.regulyn.events.outbox.OutboxEventRepository;
 import io.regulyn.connector.model.ConnectorCredential;
 import io.regulyn.connector.repository.ConnectorCredentialRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class CredentialResolutionService {
     private final EncryptionService encryptionService;
     private final Optional<SecretsManagerClient> secretsManagerClient;
     private final OutboxEventRepository outboxRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
     // In-memory cache: key = tenantId:connectorId:secretId:version, value = CacheEntry
@@ -47,11 +49,13 @@ public class CredentialResolutionService {
             EncryptionService encryptionService,
             Optional<SecretsManagerClient> secretsManagerClient,
             OutboxEventRepository outboxRepository,
+            JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper) {
         this.credentialRepository = credentialRepository;
         this.encryptionService = encryptionService;
         this.secretsManagerClient = secretsManagerClient;
         this.outboxRepository = outboxRepository;
+        this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
     }
 
@@ -66,7 +70,9 @@ public class CredentialResolutionService {
      */
     public ResolvedCredentials resolve(UUID tenantId, UUID connectorId, String correlationId) {
         Instant startTime = Instant.now();
-        emitOutboxEvent(tenantId, connectorId, correlationId, "CREDENTIAL_RESOLVE_STARTED", null, null);
+        String safeCorrelationId = normalizeCorrelationId(correlationId, "cred-");
+        emitOutboxEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_STARTED", null, null);
+        emitAuditEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_STARTED", null, null);
 
         try {
             // Load credential row
@@ -97,17 +103,20 @@ public class CredentialResolutionService {
                     );
             }
 
-            emitOutboxEvent(tenantId, connectorId, correlationId, "CREDENTIAL_RESOLVE_SUCCEEDED", provider, null);
+            emitOutboxEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_SUCCEEDED", provider, null);
+            emitAuditEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_SUCCEEDED", provider, null);
 
             logger.info("Successfully resolved credentials for connector {} using provider {}", connectorId, provider);
             return resolved;
 
         } catch (CredentialResolutionException e) {
-            emitOutboxEvent(tenantId, connectorId, correlationId, "CREDENTIAL_RESOLVE_FAILED", null, e.getErrorCode());
+            emitOutboxEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_FAILED", null, e.getErrorCode());
+            emitAuditEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_FAILED", null, e.getErrorCode());
             logger.error("Credential resolution failed for connector {}: {}", connectorId, e.getMessage());
             throw e;
         } catch (Exception e) {
-            emitOutboxEvent(tenantId, connectorId, correlationId, "CREDENTIAL_RESOLVE_FAILED", null, "INTERNAL_ERROR");
+            emitOutboxEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_FAILED", null, "INTERNAL_ERROR");
+            emitAuditEvent(tenantId, connectorId, safeCorrelationId, "CREDENTIAL_RESOLVE_FAILED", null, "INTERNAL_ERROR");
             logger.error("Unexpected error resolving credentials for connector {}", connectorId, e);
             throw new CredentialResolutionException("INTERNAL_ERROR", "Unexpected error during credential resolution", e);
         }
@@ -257,6 +266,54 @@ public class CredentialResolutionService {
         }
 
         outboxRepository.saveAndFlush(outboxEvent);
+    }
+
+    private void emitAuditEvent(UUID tenantId, UUID connectorId, String correlationId, String action, String provider, String errorCode) {
+        try {
+            Map<String, Object> payloadMap = new HashMap<>();
+            payloadMap.put("connectorId", connectorId.toString());
+            payloadMap.put("correlationId", correlationId);
+            if (provider != null) {
+                payloadMap.put("provider", provider);
+            }
+            if (errorCode != null) {
+                payloadMap.put("errorCode", errorCode);
+            }
+
+            String payloadJson = objectMapper.writeValueAsString(payloadMap);
+            String sql = """
+                INSERT INTO connector.audit_events (
+                    event_id, tenant_id, occurred_at, actor_id, actor_type, service,
+                    action, entity_type, entity_id, payload_hash, evidence_id, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                """;
+
+            jdbcTemplate.update(
+                    sql,
+                    UUID.randomUUID(),
+                    tenantId,
+                    java.sql.Timestamp.from(Instant.now()),
+                    null,
+                    "SYSTEM",
+                    "connector-service",
+                    action,
+                    "CONNECTOR_CREDENTIAL",
+                    connectorId.toString(),
+                    Integer.toString(payloadJson.hashCode()),
+                    null,
+                    payloadJson
+            );
+        } catch (Exception e) {
+            logger.error("Failed to write audit event {} for connector {}", action, connectorId, e);
+        }
+    }
+
+    private String normalizeCorrelationId(String correlationId, String prefix) {
+        String value = correlationId;
+        if (value == null || value.isBlank()) {
+            value = prefix + UUID.randomUUID();
+        }
+        return value.length() > 64 ? value.substring(0, 64) : value;
     }
 
     /**

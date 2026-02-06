@@ -161,7 +161,6 @@ public class ConnectorScheduleEngine {
         ZoneId zoneId = ZoneId.of(timezone);
         ZonedDateTime fromZdt = fromTime.atZone(zoneId);
         LocalDateTime next = cron.next(fromZdt.toLocalDateTime());
-        
         if (next == null) {
             throw new IllegalStateException("Cron expression has no future executions: " + cronExpr);
         }
@@ -273,6 +272,7 @@ public class ConnectorScheduleEngine {
         }
         
         outboxRepository.saveAndFlush(event);
+        writeAuditEvent("SCHEDULE_FIRED", schedule, null, event.getPayload());
     }
 
     /**
@@ -311,6 +311,7 @@ public class ConnectorScheduleEngine {
         }
         
         outboxRepository.saveAndFlush(event);
+        writeAuditEvent("RUN_CREATED", null, run, event.getPayload());
     }
 
     /**
@@ -348,6 +349,40 @@ public class ConnectorScheduleEngine {
         }
         
         outboxRepository.saveAndFlush(event);
+        writeAuditEvent("SCHEDULE_DISABLED_DUE_TO_ERROR", schedule, null, event.getPayload());
+    }
+
+    private void writeAuditEvent(String action, ConnectorSchedule schedule, ConnectorRun run, String payloadJson) {
+        try {
+            String sql = """
+                INSERT INTO connector.audit_events (
+                    event_id, tenant_id, occurred_at, actor_id, actor_type, service,
+                    action, entity_type, entity_id, payload_hash, evidence_id, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                """;
+
+            UUID tenantId = schedule != null ? schedule.getTenantId() : run.getTenantId();
+            String entityType = schedule != null ? "CONNECTOR_SCHEDULE" : "CONNECTOR_RUN";
+            String entityId = schedule != null ? schedule.getId().toString() : run.getId().toString();
+
+            jdbcTemplate.update(
+                    sql,
+                    UUID.randomUUID(),
+                    tenantId,
+                    java.sql.Timestamp.from(Instant.now()),
+                    null,
+                    "SYSTEM",
+                    "connector-service",
+                    action,
+                    entityType,
+                    entityId,
+                    Integer.toString(payloadJson != null ? payloadJson.hashCode() : 0),
+                    null,
+                    payloadJson != null ? payloadJson : "{}"
+            );
+        } catch (Exception e) {
+            logger.error("Failed to write audit event {}", action, e);
+        }
     }
 
     /**

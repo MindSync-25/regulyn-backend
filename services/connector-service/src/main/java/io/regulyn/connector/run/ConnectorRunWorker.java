@@ -115,8 +115,17 @@ public class ConnectorRunWorker {
 
         for (Map<String, Object> row : rows) {
             ConnectorRun run = mapRowToRun(row);
-                Instant now = Instant.now();
-                java.sql.Timestamp nowTs = java.sql.Timestamp.from(now);
+            Instant now = Instant.now();
+            java.sql.Timestamp nowTs = java.sql.Timestamp.from(now);
+
+            String safeCorrelationId = normalizeCorrelationId(run.getCorrelationId(), "run-");
+            if (run.getCorrelationId() == null || !run.getCorrelationId().equals(safeCorrelationId)) {
+                jdbcTemplate.update(
+                        "UPDATE connector.connector_runs SET correlation_id=? WHERE id=?",
+                        safeCorrelationId, run.getId()
+                );
+                run.setCorrelationId(safeCorrelationId);
+            }
             jdbcTemplate.update(
                     "UPDATE connector.connector_runs SET status='RUNNING', started_at=?, updated_at=? WHERE id=?",
                     nowTs, nowTs, run.getId()
@@ -292,7 +301,7 @@ public class ConnectorRunWorker {
             }
             payload.put("jobType", run.getJobType().name());
             payload.put("status", run.getStatus().name());
-            payload.put("correlationId", run.getCorrelationId());
+            payload.put("correlationId", normalizeCorrelationId(run.getCorrelationId(), "run-"));
             payload.put("attempts", run.getAttempts());
             if (run.getNextRetryAt() != null) {
                 payload.put("nextRetryAt", run.getNextRetryAt().toString());
@@ -393,5 +402,13 @@ public class ConnectorRunWorker {
         run.setCreatedAt(((java.sql.Timestamp) row.get("created_at")).toInstant());
         run.setUpdatedAt(((java.sql.Timestamp) row.get("updated_at")).toInstant());
         return run;
+    }
+
+    private String normalizeCorrelationId(String correlationId, String prefix) {
+        String value = correlationId;
+        if (value == null || value.isBlank()) {
+            value = prefix + UUID.randomUUID();
+        }
+        return value.length() > 64 ? value.substring(0, 64) : value;
     }
 }

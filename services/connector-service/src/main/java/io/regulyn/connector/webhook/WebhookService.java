@@ -12,6 +12,7 @@ import io.regulyn.connector.repository.ConnectorRepository;
 import io.regulyn.connector.repository.WebhookEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,7 @@ public class WebhookService {
     private final CredentialResolutionService credentialResolutionService;
     private final WebhookSignatureVerifier signatureVerifier;
     private final WebhookNormalizer normalizer;
+    private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
     public WebhookService(
@@ -43,6 +45,7 @@ public class WebhookService {
             CredentialResolutionService credentialResolutionService,
             WebhookSignatureVerifier signatureVerifier,
             WebhookNormalizer normalizer,
+            JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper) {
         this.connectorRepository = connectorRepository;
         this.webhookEventRepository = webhookEventRepository;
@@ -50,6 +53,7 @@ public class WebhookService {
         this.credentialResolutionService = credentialResolutionService;
         this.signatureVerifier = signatureVerifier;
         this.normalizer = normalizer;
+        this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
     }
 
@@ -72,9 +76,7 @@ public class WebhookService {
             String correlationId) {
 
         // Generate correlation ID if not provided
-        if (correlationId == null || correlationId.isEmpty()) {
-            correlationId = "webhook-" + UUID.randomUUID().toString();
-        }
+        correlationId = normalizeCorrelationId(correlationId, "webhook-");
 
         try {
             // 1. Look up connector and derive tenant
@@ -299,6 +301,7 @@ public class WebhookService {
         outbox.setStatus(com.regulyn.events.outbox.OutboxStatus.PENDING);
         outbox.setNextAttemptAt(Instant.now());
 
+        String payloadJson = null;
         try {
             Map<String, Object> payload = new HashMap<>();
             payload.put("webhookId", event.getId().toString());
@@ -311,7 +314,7 @@ public class WebhookService {
                 payload.put("normalizedType", event.getNormalizedType());
             }
 
-            String payloadJson = objectMapper.writeValueAsString(payload);
+            payloadJson = objectMapper.writeValueAsString(payload);
             outbox.setPayload(payloadJson);
             outbox.setPayloadHash(Integer.toString(payloadJson.hashCode()));
         } catch (Exception e) {
@@ -319,6 +322,7 @@ public class WebhookService {
         }
 
         outboxEventRepository.saveAndFlush(outbox);
+        writeAuditEvent("WEBHOOK_RECEIVED", event, payloadJson, null);
     }
 
     /**
@@ -337,6 +341,7 @@ public class WebhookService {
         outbox.setStatus(com.regulyn.events.outbox.OutboxStatus.PENDING);
         outbox.setNextAttemptAt(Instant.now());
 
+        String payloadJson = null;
         try {
             Map<String, Object> payload = new HashMap<>();
             payload.put("webhookId", event.getId().toString());
@@ -345,7 +350,7 @@ public class WebhookService {
             payload.put("correlationId", event.getCorrelationId());
             payload.put("payloadHash", event.getPayloadHash());
 
-            String payloadJson = objectMapper.writeValueAsString(payload);
+            payloadJson = objectMapper.writeValueAsString(payload);
             outbox.setPayload(payloadJson);
             outbox.setPayloadHash(Integer.toString(payloadJson.hashCode()));
         } catch (Exception e) {
@@ -353,6 +358,7 @@ public class WebhookService {
         }
 
         outboxEventRepository.saveAndFlush(outbox);
+        writeAuditEvent("WEBHOOK_SIGNATURE_INVALID", event, payloadJson, null);
     }
 
     /**
@@ -371,6 +377,7 @@ public class WebhookService {
         outbox.setStatus(com.regulyn.events.outbox.OutboxStatus.PENDING);
         outbox.setNextAttemptAt(Instant.now());
 
+        String payloadJson = null;
         try {
             Map<String, Object> payload = new HashMap<>();
             payload.put("webhookId", event.getId().toString());
@@ -382,7 +389,7 @@ public class WebhookService {
                 payload.put("normalizedSubject", normalized.getNormalizedSubject());
             }
 
-            String payloadJson = objectMapper.writeValueAsString(payload);
+            payloadJson = objectMapper.writeValueAsString(payload);
             outbox.setPayload(payloadJson);
             outbox.setPayloadHash(Integer.toString(payloadJson.hashCode()));
         } catch (Exception e) {
@@ -390,6 +397,44 @@ public class WebhookService {
         }
 
         outboxEventRepository.saveAndFlush(outbox);
+        writeAuditEvent("WEBHOOK_NORMALIZED", event, payloadJson, null);
+    }
+
+    private void writeAuditEvent(String action, WebhookEvent event, String payloadJson, String evidenceId) {
+        try {
+            String sql = """
+                INSERT INTO connector.audit_events (
+                    event_id, tenant_id, occurred_at, actor_id, actor_type, service,
+                    action, entity_type, entity_id, payload_hash, evidence_id, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                """;
+
+            jdbcTemplate.update(
+                    sql,
+                    UUID.randomUUID(),
+                    event.getTenantId(),
+                    java.sql.Timestamp.from(Instant.now()),
+                    null,
+                    "SYSTEM",
+                    "connector-service",
+                    action,
+                    "WEBHOOK_EVENT",
+                    event.getId().toString(),
+                    Integer.toString(payloadJson.hashCode()),
+                    evidenceId,
+                    payloadJson
+            );
+        } catch (Exception e) {
+            logger.error("Failed to write audit event {} for webhook {}", action, event.getId(), e);
+        }
+    }
+
+    private String normalizeCorrelationId(String correlationId, String prefix) {
+        String value = correlationId;
+        if (value == null || value.isBlank()) {
+            value = prefix + UUID.randomUUID();
+        }
+        return value.length() > 64 ? value.substring(0, 64) : value;
     }
 
     /**

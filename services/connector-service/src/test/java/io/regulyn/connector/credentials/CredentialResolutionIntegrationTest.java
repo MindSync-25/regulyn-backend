@@ -334,6 +334,7 @@ class CredentialResolutionIntegrationTest extends AbstractAwsIntegrationTestBase
             encryptionService,
             Optional.empty(), // AWS disabled
             outboxRepository,
+            jdbcTemplate,
             objectMapper
         );
 

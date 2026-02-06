@@ -16,12 +16,9 @@ import io.regulyn.connector.run.adapter.ConnectorAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -34,6 +31,7 @@ import static org.mockito.Mockito.when;
 /**
  * Integration tests for ConnectorRunWorker.
  */
+@ActiveProfiles("fail-adapter")
 class ConnectorRunWorkerIntegrationTest extends AbstractIntegrationTestBase {
 
     @Autowired
@@ -294,32 +292,4 @@ class ConnectorRunWorkerIntegrationTest extends AbstractIntegrationTestBase {
         return runRepository.saveAndFlush(run);
     }
 
-    @TestConfiguration
-    static class FailingAdapterConfig {
-        @Bean
-        @Order(Ordered.HIGHEST_PRECEDENCE)
-        ConnectorAdapter failingAdapter() {
-            return new ConnectorAdapter() {
-                @Override
-                public boolean supports(ConnectorRun.JobType jobType, Connector connector) {
-                    return "FAIL".equalsIgnoreCase(connector.getConnectorType());
-                }
-
-                @Override
-                public ExecutionResult executeAuditPull(ConnectorRun run, ConnectorCursorState cursorState, io.regulyn.connector.credentials.ResolvedCredentials credentials) {
-                    throw new RuntimeException("fail");
-                }
-
-                @Override
-                public ExecutionResult executeExport(ConnectorRun run, ConnectorCursorState cursorState, io.regulyn.connector.credentials.ResolvedCredentials credentials) {
-                    throw new RuntimeException("fail");
-                }
-
-                @Override
-                public ExecutionResult executeDelete(ConnectorRun run, io.regulyn.connector.credentials.ResolvedCredentials credentials) {
-                    throw new RuntimeException("fail");
-                }
-            };
-        }
-    }
 }

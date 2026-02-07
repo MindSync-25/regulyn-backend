@@ -41,7 +41,7 @@ public class AuditWriter {
                 event_id, tenant_id, occurred_at, actor_id, actor_type, 
                 service, action, entity_type, entity_id, payload_hash, 
                 evidence_id, metadata
-            ) VALUES (?, ?, ?, ?, ?::text, ?, ?, ?, ?, ?, ?, ?::jsonb)
+            ) VALUES (?, ?, ?, ?, ?::text, ?, ?, ?, ?::uuid, ?, ?, ?::jsonb)
             """, auditSchema);
     }
     
@@ -59,6 +59,15 @@ public class AuditWriter {
                 metadataJson.setValue("{}");
             }
             
+            UUID entityId = null;
+            if (event.getEntityId() != null && !event.getEntityId().isBlank()) {
+                try {
+                    entityId = UUID.fromString(event.getEntityId());
+                } catch (IllegalArgumentException ex) {
+                    log.warn("Invalid entityId UUID for audit event: {}", event.getEntityId());
+                }
+            }
+
             jdbcTemplate.update(insertSql,
                     event.getEventId(),
                     event.getTenantId(),
@@ -68,7 +77,7 @@ public class AuditWriter {
                     event.getService() != null ? event.getService() : serviceName,
                     event.getAction(),
                     event.getEntityType(),
-                    event.getEntityId(),
+                    entityId,
                     event.getPayloadHash(),
                     event.getEvidenceId(),
                     metadataJson

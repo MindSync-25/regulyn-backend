@@ -1,29 +1,20 @@
 package com.regulyn.notification.config;
 
+import com.regulyn.auth.apikey.ApiKeyValidator;
 import com.regulyn.common.audit.AuditWriter;
 import com.regulyn.events.outbox.OutboxWriter;
+import com.regulyn.notification.provider.EmailSendCommand;
+import com.regulyn.notification.provider.NotificationProvider;
+import com.regulyn.notification.provider.ProviderResult;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
 
 import static org.mockito.Mockito.mock;
 
 @TestConfiguration
-@EnableWebSecurity
 public class TestSecurityConfig {
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(AbstractHttpConfigurer::disable)
-            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
-        return http.build();
-    }
-    
     /**
      * Mock AuditWriter to avoid audit_events table dependency in tests.
      * The audit_events table is from lib-common and not part of this service's schema.
@@ -42,5 +33,32 @@ public class TestSecurityConfig {
     @Primary
     public OutboxWriter outboxWriter() {
         return mock(OutboxWriter.class);
+    }
+
+    @Bean
+    @Primary
+    public ApiKeyValidator apiKeyValidator() {
+        return mock(ApiKeyValidator.class);
+    }
+
+    @Bean
+    @Primary
+    public NotificationProvider notificationProvider() {
+        return new NotificationProvider() {
+            @Override
+            public ProviderResult sendEmail(EmailSendCommand command) {
+                return ProviderResult.success(getProviderName(), "test-message-id");
+            }
+
+            @Override
+            public String getChannel() {
+                return "EMAIL";
+            }
+
+            @Override
+            public String getProviderName() {
+                return "TEST";
+            }
+        };
     }
 }

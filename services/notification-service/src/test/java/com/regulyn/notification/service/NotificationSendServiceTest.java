@@ -4,6 +4,7 @@ import com.regulyn.auth.context.TenantContext;
 import com.regulyn.auth.context.TenantContextHolder;
 import com.regulyn.notification.config.TestSecurityConfig;
 import com.regulyn.notification.dto.*;
+import com.regulyn.notification.integration.EvidenceClient;
 import com.regulyn.notification.repository.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -24,6 +26,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
@@ -42,6 +47,7 @@ class NotificationSendServiceTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.schemas", () -> "notification");
+        registry.add("consent.enabled", () -> "false");
     }
     
     @Autowired
@@ -67,9 +73,15 @@ class NotificationSendServiceTest {
     
     @Autowired
     private NotificationDispatchLogRepository dispatchLogRepository;
+
+    @Autowired
+    private NotificationMessageRepository messageRepository;
     
     @Autowired
     private CommunicationPreferenceRepository preferenceRepository;
+    
+    @MockBean
+    private EvidenceClient evidenceClient;
     
     @BeforeEach
     void setUp() {
@@ -78,12 +90,15 @@ class NotificationSendServiceTest {
         context.setUserId(UUID.fromString("00000000-0000-0000-0000-000000000002"));
         context.setRequestId("request-001");
         TenantContextHolder.setContext(context);
+        when(evidenceClient.createNotificationSentArtifact(any(), anyString()))
+            .thenReturn("evidence-001");
     }
     
     @AfterEach
     void tearDown() {
         TenantContextHolder.clear();
         dispatchLogRepository.deleteAll();
+        messageRepository.deleteAll();
         requestRepository.deleteAll();
         preferenceRepository.deleteAll();
         // Clear active_version_id FK references first
@@ -156,8 +171,8 @@ class NotificationSendServiceTest {
         // Then - should be skipped
         assertThat(response.sentCount()).isEqualTo(0);
         assertThat(response.skippedCount()).isEqualTo(1);
-        assertThat(response.dispatches().get(0).status()).isEqualTo("SKIPPED_OPT_OUT");
-        assertThat(response.dispatches().get(0).reason()).contains("Opted out");
+        assertThat(response.dispatches().get(0).status()).isEqualTo("CONSENT_BLOCKED");
+        assertThat(response.dispatches().get(0).reason()).contains("OPTED_OUT");
         
         // Verify dispatch log
         var dispatchLogs = dispatchLogRepository.findAll();
@@ -203,7 +218,7 @@ class NotificationSendServiceTest {
     
     @DirtiesContext
     @Test
-    void shouldPreventDuplicateRequestRef() {
+    void shouldReturnIdempotentReplayForDuplicateRequestRef() {
         // Given
         UUID templateId = createAndPublishTemplate();
         
@@ -217,9 +232,9 @@ class NotificationSendServiceTest {
         );
         
         // When - send first time
-        sendService.sendNotification(request1);
+        SendNotificationResponse first = sendService.sendNotification(request1);
         
-        // Then - second time should fail
+        // Then - second time should be idempotent replay
         SendNotificationRequest request2 = new SendNotificationRequest(
             "unique-ref-001",
             "DSAR_REMINDER",
@@ -229,9 +244,9 @@ class NotificationSendServiceTest {
             null
         );
         
-        assertThatThrownBy(() -> sendService.sendNotification(request2))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Duplicate request_ref");
+        SendNotificationResponse replay = sendService.sendNotification(request2);
+        assertThat(replay.notificationRequestId()).isEqualTo(first.notificationRequestId());
+        assertThat(replay.dispatches()).isEmpty();
     }
     
     @DirtiesContext

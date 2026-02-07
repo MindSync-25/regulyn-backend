@@ -6,8 +6,8 @@ Multi-channel notification and communication preference management service for D
 Manages notification templates, communication preferences, and multi-channel message delivery with:
 - **Template Management**: Versioned templates with multi-language support
 - **Preference Management**: Opt-out/opt-in controls per channel and category
-- **Multi-Channel Delivery**: EMAIL, SMS, IN_APP, PUSH providers
-- **Compliance**: MARKETING messages respect opt-outs, LEGAL/SECURITY messages always delivered
+- **Multi-Channel Delivery**: EMAIL via SMTP (plus LocalLogProvider for dev); other channels are accepted as strings but not yet implemented
+- **Compliance**: MARKETING opt-outs block sends; LEGAL consent-check failures can be bypassed with audit trails (delivery still depends on provider)
 - **Observability**: Full audit trail and outbox event integration
 
 ## Tech Stack
@@ -40,10 +40,13 @@ CREATE → DRAFT → ADD_LANGUAGES → PUBLISH → ACTIVE
 - **Publishing**: Only one PUBLISHED version per template; previous auto-retires
 
 ### Communication Categories
-1. **MARKETING** - Promotional, can be opted out, dispatch blocked if opted out
-2. **TRANSACTIONAL** - Service updates, logs opt-out but delivers anyway  
-3. **LEGAL** - Legal notices, logs opt-out but always delivers
-4. **SECURITY** - Security alerts, logs opt-out but always delivers
+Categories are free-form strings. Current consent rules are implemented for `MARKETING` and `LEGAL` only; other categories are treated as non-marketing (opt-out does not block, consent-check failures allow send with audit, and no LEGAL bypass event is emitted).
+
+Recommended categories (from DB comments):
+1. **MARKETING**
+2. **LEGAL**
+3. **SECURITY** (treated as non-marketing unless explicit logic is added)
+4. **OPERATIONS** (treated as non-marketing unless explicit logic is added)
 
 ### Notification Flow
 ```
@@ -51,12 +54,17 @@ CREATE → DRAFT → ADD_LANGUAGES → PUBLISH → ACTIVE
 2. Resolve template by key + language (fallback to default language)
 3. Substitute variables: {{user_name}} → "John Doe"
 4. Resolve audience: BOARD | ALL_USERS | DATA_PRINCIPAL | USER_IDS
-5. Check opt-out preferences per recipient + channel + category
-6. If MARKETING + opted_out → SKIP (audit: NOTIFICATION_SKIPPED_OPT_OUT)
-7. If LEGAL/SECURITY + opted_out → SEND (audit: NOTIFICATION_SENT + opt-out logged)
-8. Calculate message_hash: SHA-256(subject + body)
-9. Dispatch via provider: LocalLogProvider (dev), EmailProvider (prod)
-10. Record dispatch log with status: SENT | FAILED | SKIPPED_OPT_OUT
+5. Create notification_message record (idempotent hash)
+6. Apply consent enforcement (local opt-out + external consent check)
+7. If MARKETING + opted_out → CONSENT_BLOCKED (audit/outbox: NOTIFICATION_CONSENT_BLOCKED)
+8. If consent check fails:
+  - MARKETING → CONSENT_BLOCKED (audit/outbox: NOTIFICATION_CONSENT_CHECK_FAILED)
+  - LEGAL → send allowed with bypass audit/outbox (NOTIFICATION_BYPASSED_CONSENT_DUE_TO_LEGAL)
+  - Other categories → send allowed with NOTIFICATION_CONSENT_CHECK_FAILED
+9. Non-marketing opt-outs are logged but do not block send
+10. Calculate message_hash: SHA-256(requestId|recipientAddress|templateIdOrKey|category)
+11. Dispatch via provider: LocalLogProvider (dev) or SmtpEmailProvider (when SMTP enabled)
+12. Record dispatch log for legacy/compat reporting (may show SKIPPED_OPT_OUT while the message status is CONSENT_BLOCKED)
 ```
 
 ### Audit & Event Integration
@@ -64,11 +72,35 @@ Every operation emits:
 - **Audit Event** (via AuditWriter → audit_events table):
   - TEMPLATE_CREATED, TEMPLATE_VERSION_CREATED, TEMPLATE_LANGUAGE_ADDED, TEMPLATE_VERSION_PUBLISHED
   - PREFERENCE_OPTED_OUT, PREFERENCE_OPTED_IN
-  - NOTIFICATION_SEND_REQUESTED, NOTIFICATION_SENT, NOTIFICATION_SKIPPED_OPT_OUT, NOTIFICATION_FAILED
+  - NOTIFICATION_SEND_REQUESTED, NOTIFICATION_SENT, NOTIFICATION_FAILED
+  - NOTIFICATION_CONSENT_BLOCKED, NOTIFICATION_CONSENT_CHECK_FAILED, NOTIFICATION_BYPASSED_CONSENT_DUE_TO_LEGAL
 - **Outbox Event** (via OutboxWriter → outbox_events table):
   - notification.template_created, notification.template_version_created
   - notification.template_language_added, notification.template_published
   - notification.preference_updated, notification.send_requested
+
+---
+
+## Consent Enforcement (Round 2 Part 5)
+
+### Rules by Category
+- **MARKETING**: Fail-closed. Local opt-out blocks immediately. External consent check failures also block.
+- **LEGAL**: External consent check failures are allowed **only** with explicit bypass events.
+- **Other categories**: Consent check failures do **not** block; send is allowed but must be recorded.
+
+### Required Events
+- `NOTIFICATION_CONSENT_BLOCKED`
+- `NOTIFICATION_CONSENT_CHECK_FAILED`
+- `NOTIFICATION_BYPASSED_CONSENT_DUE_TO_LEGAL`
+
+### Statuses
+- Message status: `CONSENT_BLOCKED`
+- Dispatch log status: `SKIPPED_OPT_OUT`
+
+### Operational Notes
+- Consent-service outage blocks MARKETING only.
+- LEGAL and other non-marketing categories continue but emit `NOTIFICATION_CONSENT_CHECK_FAILED`.
+- Use audit/outbox + evidence references to prove consent decision trails.
 
 ---
 
@@ -103,7 +135,7 @@ Content-Type: application/json
 
 **Validation:**
 - `templateKey` unique constraint
-- `category` must be: MARKETING | TRANSACTIONAL | LEGAL | SECURITY
+- `category` is a free-form string; consent rules are enforced only for MARKETING and LEGAL
 - `defaultLanguage` must be ISO 639-1 code (en, fr, es, etc.)
 
 ---
@@ -276,16 +308,13 @@ Content-Type: application/json
 ```
 
 **Channels:**
-- EMAIL
-- SMS
-- IN_APP
-- PUSH
+- EMAIL (implemented)
+- Other channels are accepted as strings but have no provider implementation yet
 
 **Categories:**
 - MARKETING - Can be opted out (blocks dispatch)
-- TRANSACTIONAL - Can be opted out (logs but sends)
 - LEGAL - Can be opted out (logs but sends)
-- SECURITY - Can be opted out (logs but sends)
+- Other categories are treated as non-marketing (opt-out does not block)
 
 **Upsert Logic:**
 - If preference exists for (data_principal_id, channel, category) → UPDATE
@@ -383,8 +412,8 @@ Content-Type: application/json
   "skippedCount": 1,
   "dispatches": [
     {
-      "status": "SKIPPED_OPT_OUT",
-      "reason": "Opted out from MARKETING notifications on EMAIL channel",
+      "status": "CONSENT_BLOCKED",
+      "reason": "OPTED_OUT",
       "sentAt": null
     }
   ]
@@ -406,118 +435,28 @@ Content-Type: application/json
 ```
 
 **Idempotency:**
-- If `requestRef` already exists → throws `IllegalArgumentException`
-- Use unique requestRef to prevent duplicate sends
+- If `requestRef` already exists → returns the existing request response and emits `NOTIFICATION_IDEMPOTENT_REPLAY`
+- Use a unique requestRef to prevent duplicate sends
 
 ---
 
 ## Database Schema
 
-### notification.notification_templates
-```sql
-CREATE TABLE notification.notification_templates (
-    template_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    template_key VARCHAR(255) NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    default_language VARCHAR(10) NOT NULL,
-    description TEXT,
-    is_active BOOLEAN DEFAULT true,
-    active_version_id UUID REFERENCES notification.notification_template_versions(version_id),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP,
-    created_by VARCHAR(255),
-    updated_by VARCHAR(255),
-    UNIQUE(tenant_id, template_key)
-);
-CREATE INDEX idx_templates_tenant_key ON notification.notification_templates(tenant_id, template_key);
-```
+Schema is defined in Flyway migrations. See:
+- [services/notification-service/src/main/resources/db/migration/V4__notification_domain.sql](services/notification-service/src/main/resources/db/migration/V4__notification_domain.sql)
+- [services/notification-service/src/main/resources/db/migration/V5__notification_messages_and_delivery_receipts.sql](services/notification-service/src/main/resources/db/migration/V5__notification_messages_and_delivery_receipts.sql)
 
-### notification.notification_template_versions
-```sql
-CREATE TABLE notification.notification_template_versions (
-    version_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    template_id UUID NOT NULL REFERENCES notification.notification_templates(template_id),
-    version_number INT NOT NULL,
-    status VARCHAR(20) NOT NULL, -- DRAFT, PUBLISHED, RETIRED
-    version_description TEXT,
-    published_at TIMESTAMP,
-    retire_date TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW(),
-    created_by VARCHAR(255),
-    UNIQUE(template_id, version_number)
-);
-```
+Key tables:
+- `notification.notification_templates`
+- `notification.notification_template_versions`
+- `notification.notification_template_language`
+- `notification.communication_preferences`
+- `notification.notification_requests`
+- `notification.notification_dispatch_logs`
+- `notification.notification_messages`
+- `notification.notification_delivery_receipts`
 
-### notification.notification_template_languages
-```sql
-CREATE TABLE notification.notification_template_languages (
-    language_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    version_id UUID NOT NULL REFERENCES notification.notification_template_versions(version_id),
-    language_code VARCHAR(10) NOT NULL,
-    subject TEXT NOT NULL,
-    body TEXT NOT NULL,
-    format VARCHAR(20) DEFAULT 'TEXT', -- TEXT, HTML, MARKDOWN
-    created_at TIMESTAMP DEFAULT NOW(),
-    created_by VARCHAR(255),
-    UNIQUE(version_id, language_code)
-);
-```
-
-### notification.communication_preferences
-```sql
-CREATE TABLE notification.communication_preferences (
-    preference_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    data_principal_id VARCHAR(255) NOT NULL,
-    channel VARCHAR(50) NOT NULL, -- EMAIL, SMS, IN_APP, PUSH
-    category VARCHAR(50) NOT NULL, -- MARKETING, TRANSACTIONAL, LEGAL, SECURITY
-    opted_out BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP,
-    UNIQUE(tenant_id, data_principal_id, channel, category)
-);
-CREATE INDEX idx_prefs_principal_channel ON notification.communication_preferences(data_principal_id, channel, category);
-```
-
-### notification.notification_requests
-```sql
-CREATE TABLE notification.notification_requests (
-    request_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    request_ref VARCHAR(255),
-    template_key VARCHAR(255) NOT NULL,
-    language_code VARCHAR(10),
-    channel VARCHAR(50) NOT NULL,
-    audience_type VARCHAR(50) NOT NULL,
-    variables JSONB,
-    created_at TIMESTAMP DEFAULT NOW(),
-    created_by VARCHAR(255),
-    UNIQUE(tenant_id, request_ref)
-);
-```
-
-### notification.notification_dispatch_logs
-```sql
-CREATE TABLE notification.notification_dispatch_logs (
-    dispatch_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    request_id UUID NOT NULL REFERENCES notification.notification_requests(request_id),
-    recipient_id VARCHAR(255) NOT NULL,
-    recipient_address TEXT,
-    message_subject TEXT,
-    message_body TEXT,
-    message_hash VARCHAR(64),
-    status VARCHAR(20) NOT NULL, -- SENT, FAILED, SKIPPED_OPT_OUT
-    skip_reason TEXT,
-    sent_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX idx_dispatch_request ON notification.notification_dispatch_logs(request_id);
-CREATE INDEX idx_dispatch_recipient ON notification.notification_dispatch_logs(recipient_id, status);
-```
+Note: tenant_id types differ across tables (V4 uses VARCHAR(100); V5 uses UUID). Use the migrations as the source of truth.
 
 ---
 
@@ -537,11 +476,29 @@ spring:
     properties:
       hibernate:
         default_schema: notification
+
+server:
+  port: 8092
+
+consent:
+  enabled: true
+  baseUrl: http://localhost:8084
+  timeout: 2s
+
+notification:
+  retry:
+    enabled: true
+    fixedDelayMs: 30000
+    batchSize: 50
+
+evidence:
+  service:
+    url: http://localhost:8083
 ```
 
 ### Provider Configuration
-Current: **LocalLogProvider** (logs to console)
-Future: EmailProvider, SmsProvider, PushProvider
+Current: **LocalLogProvider** (dev) and **SmtpEmailProvider** when `smtp.enabled=true`
+Future: SMS/WhatsApp, Push providers
 
 ---
 
@@ -550,7 +507,7 @@ Future: EmailProvider, SmsProvider, PushProvider
 ### Example 1: DSAR Reminder Flow
 ```bash
 # 1. Create template
-curl -X POST http://localhost:8080/api/notifications/templates \
+curl -X POST http://localhost:8092/api/notifications/templates \
   -H "Content-Type: application/json" \
   -d '{
     "templateKey": "DSAR_REMINDER",
@@ -560,12 +517,12 @@ curl -X POST http://localhost:8080/api/notifications/templates \
   }'
 
 # 2. Create version
-curl -X POST http://localhost:8080/api/notifications/templates/{templateId}/versions \
+curl -X POST http://localhost:8092/api/notifications/templates/{templateId}/versions \
   -H "Content-Type: application/json" \
   -d '{"versionDescription": "Initial version"}'
 
 # 3. Add English language
-curl -X POST http://localhost:8080/api/notifications/templates/versions/{versionId}/languages \
+curl -X POST http://localhost:8092/api/notifications/templates/versions/{versionId}/languages \
   -H "Content-Type: application/json" \
   -d '{
     "languageCode": "en",
@@ -575,12 +532,12 @@ curl -X POST http://localhost:8080/api/notifications/templates/versions/{version
   }'
 
 # 4. Publish version
-curl -X POST http://localhost:8080/api/notifications/templates/versions/{versionId}/publish \
+curl -X POST http://localhost:8092/api/notifications/templates/versions/{versionId}/publish \
   -H "Content-Type: application/json" \
   -d '{}'
 
 # 5. Send notification
-curl -X POST http://localhost:8080/api/notifications/send \
+curl -X POST http://localhost:8092/api/notifications/send \
   -H "Content-Type: application/json" \
   -d '{
     "templateKey": "DSAR_REMINDER",
@@ -599,7 +556,7 @@ curl -X POST http://localhost:8080/api/notifications/send \
 ### Example 2: Opt-Out Marketing
 ```bash
 # User opts out of marketing emails
-curl -X POST http://localhost:8080/api/notifications/preferences \
+curl -X POST http://localhost:8092/api/notifications/preferences \
   -H "Content-Type: application/json" \
   -d '{
     "dataPrincipalId": "dp-12345",
@@ -608,29 +565,28 @@ curl -X POST http://localhost:8080/api/notifications/preferences \
     "optedOut": true
   }'
 
-# Attempt to send marketing email → SKIPPED
-curl -X POST http://localhost:8080/api/notifications/send \
+# Attempt to send marketing email → CONSENT_BLOCKED
+curl -X POST http://localhost:8092/api/notifications/send \
   -H "Content-Type: application/json" \
   -d '{
     "templateKey": "PROMO_OFFER",
     "channel": "EMAIL",
     "audience": {"type": "DATA_PRINCIPAL", "dataPrincipalId": "dp-12345"}
   }'
-# Response: {"sentCount": 0, "skippedCount": 1, "dispatches": [{"status": "SKIPPED_OPT_OUT"}]}
+# Response: {"sentCount": 0, "skippedCount": 1, "dispatches": [{"status": "CONSENT_BLOCKED"}]}
 ```
 
-### Example 3: Security Alert (Always Sent)
+### Example 3: Non-marketing Alert (Consent Does Not Block)
 ```bash
-# Even if user opted out of SECURITY emails, message still delivers
-curl -X POST http://localhost:8080/api/notifications/send \
+# Non-marketing categories do not block on opt-out; delivery still depends on provider availability
+curl -X POST http://localhost:8092/api/notifications/send \
   -H "Content-Type: application/json" \
   -d '{
     "templateKey": "SECURITY_BREACH_ALERT",
     "channel": "EMAIL",
     "audience": {"type": "ALL_USERS"}
   }'
-# Response: {"sentCount": 150, "skippedCount": 0} - All users receive it
-# Audit log will note: "User opted out but SECURITY category requires delivery"
+# Response: {"sentCount": 150, "skippedCount": 0} - All users receive it (subject to provider success)
 ```
 
 ---
@@ -646,8 +602,10 @@ curl -X POST http://localhost:8080/api/notifications/send \
 6. **PREFERENCE_OPTED_IN** - User opted in to channel+category
 7. **NOTIFICATION_SEND_REQUESTED** - Notification dispatch requested
 8. **NOTIFICATION_SENT** - Message successfully dispatched to recipient
-9. **NOTIFICATION_SKIPPED_OPT_OUT** - Message skipped due to opt-out (MARKETING only)
-10. **NOTIFICATION_FAILED** - Dispatch failed (provider error)
+9. **NOTIFICATION_CONSENT_BLOCKED** - Message blocked by consent rules
+10. **NOTIFICATION_CONSENT_CHECK_FAILED** - Consent service failed (audit trail)
+11. **NOTIFICATION_BYPASSED_CONSENT_DUE_TO_LEGAL** - Legal bypass on consent failure
+12. **NOTIFICATION_FAILED** - Dispatch failed (provider error)
 
 ### Outbox Events (outbox_events table)
 1. **notification.template_created**
@@ -656,6 +614,9 @@ curl -X POST http://localhost:8080/api/notifications/send \
 4. **notification.template_published**
 5. **notification.preference_updated**
 6. **notification.send_requested**
+7. **NOTIFICATION_CONSENT_BLOCKED**
+8. **NOTIFICATION_CONSENT_CHECK_FAILED**
+9. **NOTIFICATION_BYPASSED_CONSENT_DUE_TO_LEGAL**
 
 ---
 
@@ -680,14 +641,12 @@ mvn test
 ---
 
 ## Future Enhancements
-1. **Email Provider**: SMTP/SendGrid integration
-2. **SMS Provider**: Twilio/AWS SNS integration
-3. **Push Provider**: Firebase Cloud Messaging
-4. **Retry Logic**: Exponential backoff for failed dispatches
-5. **Batch Sending**: Optimize for high-volume (e.g., ALL_USERS audience)
-6. **Template Preview**: API to preview with sample variables
-7. **Scheduled Notifications**: Delayed/recurring send
-8. **Rich Formatting**: HTML + Markdown support
-9. **Attachments**: File attachments for email
-10. **Analytics**: Open rates, click tracking (with consent)
+1. **SMS Provider**: Twilio/AWS SNS integration
+2. **Push Provider**: Firebase Cloud Messaging
+3. **Batch Sending**: Optimize for high-volume (e.g., ALL_USERS audience)
+4. **Template Preview**: API to preview with sample variables
+5. **Scheduled Notifications**: Delayed/recurring send
+6. **Rich Formatting**: HTML + Markdown support
+7. **Attachments**: File attachments for email
+8. **Analytics**: Open rates, click tracking (with consent)
 

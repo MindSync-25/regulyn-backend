@@ -3,18 +3,32 @@ package com.regulyn.notification.provider;
 public interface NotificationProvider {
     
     /**
-     * Send notification to recipient
-     * @param recipientAddress Email address, phone number, or WhatsApp ID
-     * @param subject Message subject (for email)
-     * @param body Message body
-     * @param format TEXT or HTML
-     * @return true if sent successfully, false otherwise
+     * Send email notification.
      */
-    boolean send(String recipientAddress, String subject, String body, String format);
+    ProviderResult sendEmail(EmailSendCommand command);
     
     /**
-     * Get provider channel type
+     * Optional SMS support.
+     */
+    default ProviderResult sendSms(Object command) {
+        throw new UnsupportedOperationException("SMS not supported by this provider");
+    }
+    
+    /**
+     * Optional WhatsApp support.
+     */
+    default ProviderResult sendWhatsapp(Object command) {
+        throw new UnsupportedOperationException("WhatsApp not supported by this provider");
+    }
+    
+    /**
+     * Get provider channel type.
      * @return EMAIL, SMS, or WHATSAPP
      */
     String getChannel();
+    
+    /**
+     * Provider name, e.g. SMTP.
+     */
+    String getProviderName();
 }

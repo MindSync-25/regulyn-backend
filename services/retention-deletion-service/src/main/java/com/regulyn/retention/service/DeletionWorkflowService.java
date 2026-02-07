@@ -1,6 +1,9 @@
 package com.regulyn.retention.service;
 
+import com.regulyn.retention.cascade.DeletionCascadeAuditActions;
+import com.regulyn.retention.cascade.DeletionCascadeEventTypes;
 import com.regulyn.retention.entity.*;
+import com.regulyn.retention.enums.DeletionSystemExecutionStatus;
 import com.regulyn.retention.integration.EvidenceServiceClient;
 import com.regulyn.retention.integration.EvidenceServiceClient.EvidenceServiceUnavailableException;
 import com.regulyn.retention.model.*;
@@ -35,6 +38,8 @@ public class DeletionWorkflowService {
     private final DeletionProofRepository deletionProofRepository;
     private final DeletionStatusHistoryRepository deletionStatusHistoryRepository;
     private final RetentionCandidateRepository retentionCandidateRepository;
+    private final DeletionExecutionPlanRepository planRepository;
+    private final DeletionSystemExecutionRepository executionRepository;
     private final DeletionStateMachine stateMachine;
     private final EvidenceServiceClient evidenceServiceClient;
     private final LocalFileSystemArtifactStore artifactStore;
@@ -47,6 +52,8 @@ public class DeletionWorkflowService {
             DeletionProofRepository deletionProofRepository,
             DeletionStatusHistoryRepository deletionStatusHistoryRepository,
             RetentionCandidateRepository retentionCandidateRepository,
+            DeletionExecutionPlanRepository planRepository,
+            DeletionSystemExecutionRepository executionRepository,
             DeletionStateMachine stateMachine,
             EvidenceServiceClient evidenceServiceClient,
             LocalFileSystemArtifactStore artifactStore,
@@ -57,6 +64,8 @@ public class DeletionWorkflowService {
         this.deletionProofRepository = deletionProofRepository;
         this.deletionStatusHistoryRepository = deletionStatusHistoryRepository;
         this.retentionCandidateRepository = retentionCandidateRepository;
+        this.planRepository = planRepository;
+        this.executionRepository = executionRepository;
         this.stateMachine = stateMachine;
         this.evidenceServiceClient = evidenceServiceClient;
         this.artifactStore = artifactStore;
@@ -299,6 +308,10 @@ public class DeletionWorkflowService {
             throw new IllegalStateException("Deletion requires approval before moving to IN_PROGRESS");
         }
 
+        if ("COMPLETED".equalsIgnoreCase(toStatus)) {
+            ensureCascadeProofComplete(tenantId, userId, deletionId);
+        }
+
         String oldStatus = deletion.getStatus();
         deletion.setStatus(toStatus);
         deletionRequestRepository.save(deletion);
@@ -316,6 +329,13 @@ public class DeletionWorkflowService {
                 "fromStatus", oldStatus,
                 "toStatus", toStatus
         ));
+
+        if ("COMPLETED".equalsIgnoreCase(toStatus)) {
+            Map<String, Object> payload = buildCascadeCompletionPayload(tenantId, deletionId, toStatus);
+            writeAudit(tenantId, userId, DeletionCascadeAuditActions.DELETION_COMPLETED,
+                "DeletionRequest", deletionId, payload);
+            writeOutboxEvent(tenantId, DeletionCascadeEventTypes.DELETION_COMPLETED, payload);
+        }
 
         TransitionDeletionResponse response = new TransitionDeletionResponse();
         response.setDeletionId(deletionId);
@@ -368,6 +388,14 @@ public class DeletionWorkflowService {
     public CloseDeletionResponse closeDeletion(UUID tenantId, UUID userId, UUID deletionId, CloseDeletionRequest request) {
         DeletionRequest deletion = getDeletionOrThrow(tenantId, deletionId);
 
+        if ("CLOSED".equalsIgnoreCase(deletion.getStatus()) && deletion.getEvidenceBundleId() != null) {
+            CloseDeletionResponse response = new CloseDeletionResponse();
+            response.setDeletionId(deletionId);
+            response.setStatus("CLOSED");
+            response.setEvidenceBundleId(deletion.getEvidenceBundleId());
+            return response;
+        }
+
         if (!stateMachine.canClose(deletion.getStatus())) {
             throw new IllegalStateException("Cannot close deletion in status: " + deletion.getStatus());
         }
@@ -385,12 +413,24 @@ public class DeletionWorkflowService {
                     .map(DeletionProof::getArtifactHash)
                     .collect(Collectors.toList());
 
+            DeletionExecutionPlan plan = latestPlan(tenantId, deletionId).orElse(null);
+            List<Map<String, Object>> executionArtifacts = buildExecutionArtifacts(tenantId, deletionId, plan);
+
+            Map<String, Object> metadata = new HashMap<>();
+            if (plan != null) {
+            metadata.put("planId", plan.getPlanId());
+            metadata.put("planVersion", plan.getPlanVersion());
+            metadata.put("planHash", plan.getPlanHashSha256());
+            }
+            metadata.put("executionArtifacts", executionArtifacts);
+
             var evidenceResp = evidenceServiceClient.createEvidence(
-                    tenantId, userId, "DELETION", deletionId, deletion.getSubjectId(),
-                    deletion.getEntityType(), deletion.getStatus(), artifactHashes);
+                tenantId, userId, "DELETION", deletionId, deletion.getSubjectId(),
+                deletion.getEntityType(), deletion.getStatus(), artifactHashes, metadata);
 
             var bundleResp = evidenceServiceClient.createBundle(
-                    tenantId, userId, "DELETION", "DELETION_REQUEST", deletionId, List.of(evidenceResp.getEvidenceId()));
+                tenantId, userId, "DELETION", "DELETION_REQUEST", deletionId,
+                List.of(evidenceResp.getEvidenceId()), metadata);
 
             bundleId = bundleResp.getBundleId();
 
@@ -531,6 +571,115 @@ public class DeletionWorkflowService {
             // Log but don't fail the operation
             System.err.println("Failed to write audit event: " + e.getMessage());
         }
+    }
+
+    private void writeAudit(UUID tenantId, UUID userId, String action, String entityType, UUID entityId, Map<String, Object> payload) {
+        try {
+            String payloadJson = toJson(payload);
+            String payloadHash = computeHashString(payloadJson);
+            AuditEvent auditEvent = AuditEvent.builder()
+                .tenantId(tenantId)
+                .actorId(userId)
+                .actorType(AuditEvent.ActorType.USER)
+                .action(action)
+                .entityType(entityType)
+                .entityId(entityId.toString())
+                .payloadHash(payloadHash)
+                .build();
+
+            auditWriter.write(auditEvent);
+        } catch (Exception e) {
+            System.err.println("Failed to write audit event: " + e.getMessage());
+        }
+    }
+
+    private void ensureCascadeProofComplete(UUID tenantId, UUID userId, UUID deletionId) {
+        Optional<DeletionExecutionPlan> planOpt = latestPlan(tenantId, deletionId);
+        if (planOpt.isEmpty()) {
+            return;
+        }
+
+        DeletionExecutionPlan plan = planOpt.get();
+        List<DeletionSystemExecution> executions = executionRepository.findByTenantIdAndPlanId(tenantId, plan.getPlanId());
+        if (executions.isEmpty()) {
+            return;
+        }
+
+        List<Map<String, Object>> incomplete = executions.stream()
+                .filter(execution -> !isExecutionProofComplete(execution))
+                .map(execution -> Map.<String, Object>of(
+                        "executionId", execution.getExecutionId(),
+                        "systemKey", execution.getSystemKey(),
+                        "status", execution.getExecutionStatus().name(),
+                        "proofArtifactId", execution.getProofArtifactId(),
+                        "exceptionArtifactId", execution.getExceptionArtifactId()))
+                .collect(Collectors.toList());
+
+        if (!incomplete.isEmpty()) {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("tenantId", tenantId);
+            payload.put("deletionId", deletionId);
+            payload.put("planId", plan.getPlanId());
+            payload.put("planVersion", plan.getPlanVersion());
+            payload.put("incompleteExecutions", incomplete);
+
+            writeAudit(tenantId, userId, DeletionCascadeAuditActions.DELETION_PROOF_INCOMPLETE,
+                    "DeletionRequest", deletionId, payload);
+            writeOutboxEvent(tenantId, DeletionCascadeEventTypes.DELETION_PROOF_INCOMPLETE, payload);
+
+            throw new IllegalStateException("Proof incomplete for cascade executions");
+        }
+    }
+
+    private boolean isExecutionProofComplete(DeletionSystemExecution execution) {
+        if (execution.getExecutionStatus() == DeletionSystemExecutionStatus.SUCCEEDED) {
+            return execution.getProofArtifactId() != null;
+        }
+        if (execution.getExecutionStatus() == DeletionSystemExecutionStatus.EXCEPTION_GRANTED) {
+            return execution.getExceptionArtifactId() != null;
+        }
+        return false;
+    }
+
+    private Map<String, Object> buildCascadeCompletionPayload(UUID tenantId, UUID deletionId, String status) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("tenantId", tenantId);
+        payload.put("deletionId", deletionId);
+        payload.put("status", status);
+
+        latestPlan(tenantId, deletionId).ifPresent(plan -> {
+            payload.put("planId", plan.getPlanId());
+            payload.put("planVersion", plan.getPlanVersion());
+            payload.put("planHash", plan.getPlanHashSha256());
+        });
+
+        return payload;
+    }
+
+    private Optional<DeletionExecutionPlan> latestPlan(UUID tenantId, UUID deletionId) {
+        return planRepository.findByTenantIdAndDeletionIdOrderByPlanVersionDesc(tenantId, deletionId)
+                .stream()
+                .findFirst();
+    }
+
+    private List<Map<String, Object>> buildExecutionArtifacts(UUID tenantId, UUID deletionId, DeletionExecutionPlan plan) {
+        if (plan == null) {
+            return List.of();
+        }
+
+        List<DeletionSystemExecution> executions = executionRepository.findByTenantIdAndPlanId(tenantId, plan.getPlanId());
+        return executions.stream()
+                .map(execution -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("executionId", execution.getExecutionId());
+                    map.put("systemKey", execution.getSystemKey());
+                    map.put("status", execution.getExecutionStatus().name());
+                    map.put("proofArtifactId", execution.getProofArtifactId());
+                    map.put("exceptionArtifactId", execution.getExceptionArtifactId());
+                    map.put("manualProofTaskId", execution.getManualProofTaskId());
+                    return map;
+                })
+                .collect(Collectors.toList());
     }
 
     private void writeOutboxEvent(UUID tenantId, String eventType, Map<String, Object> payload) {

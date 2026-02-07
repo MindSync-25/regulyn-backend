@@ -1,6 +1,7 @@
 package com.regulyn.retention.integration;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class CreateEvidenceRequest {
@@ -10,6 +11,7 @@ public class CreateEvidenceRequest {
     private String entityType;
     private String status;
     private List<String> artifactHashes;
+    private Map<String, Object> metadata;
 
     public String getAction() { return action; }
     public void setAction(String action) { this.action = action; }
@@ -28,4 +30,7 @@ public class CreateEvidenceRequest {
 
     public List<String> getArtifactHashes() { return artifactHashes; }
     public void setArtifactHashes(List<String> artifactHashes) { this.artifactHashes = artifactHashes; }
+
+    public Map<String, Object> getMetadata() { return metadata; }
+    public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
 }

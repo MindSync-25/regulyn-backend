@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -36,7 +38,8 @@ public class EvidenceServiceClient {
             UUID subjectId,
             String entityType,
             String status,
-            List<String> artifactHashes) {
+            List<String> artifactHashes,
+            Map<String, Object> metadata) {
 
         CreateEvidenceRequest request = new CreateEvidenceRequest();
         request.setAction(action);
@@ -45,6 +48,7 @@ public class EvidenceServiceClient {
         request.setEntityType(entityType);
         request.setStatus(status);
         request.setArtifactHashes(artifactHashes);
+        request.setMetadata(metadata);
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Tenant-ID", tenantId.toString());
@@ -71,13 +75,15 @@ public class EvidenceServiceClient {
             String bundleType,
             String referenceType,
             UUID referenceId,
-            List<UUID> evidenceIds) {
+            List<UUID> evidenceIds,
+            Map<String, Object> metadata) {
 
         CreateBundleRequest request = new CreateBundleRequest();
         request.setBundleType(bundleType);
         request.setReferenceType(referenceType);
         request.setReferenceId(referenceId);
         request.setEvidenceIds(evidenceIds);
+        request.setMetadata(metadata);
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Tenant-ID", tenantId.toString());
@@ -90,6 +96,61 @@ public class EvidenceServiceClient {
                     evidenceBaseUrl + "/bundles",
                     httpEntity,
                     CreateBundleResponse.class);
+        } catch (HttpServerErrorException e) {
+            if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+                throw new EvidenceServiceUnavailableException("Evidence service unavailable", e);
+            }
+            throw e;
+        }
+    }
+
+    public CreateArtifactResponse createArtifact(
+            UUID tenantId,
+            UUID userId,
+            String artifactType,
+            String referenceType,
+            UUID referenceId,
+            String sha256,
+            String storageRef,
+            Map<String, Object> additionalMetadata) {
+
+        CreateArtifactRequest request = new CreateArtifactRequest();
+        request.setUserId(userId != null ? userId.toString() : null);
+        request.setEventType("deletion.artifact_created");
+        request.setEvidenceType(artifactType);
+        request.setDescription(referenceType + ":" + referenceId);
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("artifactType", artifactType);
+        metadata.put("referenceType", referenceType);
+        metadata.put("referenceId", referenceId);
+        metadata.put("sha256", sha256);
+        if (storageRef != null) {
+            metadata.put("storageRef", storageRef);
+        }
+        if (additionalMetadata != null && !additionalMetadata.isEmpty()) {
+            metadata.putAll(additionalMetadata);
+        }
+        request.setMetadata(metadata);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Tenant-ID", tenantId.toString());
+        headers.set("X-User-ID", userId.toString());
+
+        HttpEntity<CreateArtifactRequest> httpEntity = new HttpEntity<>(request, headers);
+
+        try {
+            CreateArtifactResponse response = restTemplate.postForObject(
+                    evidenceBaseUrl + "/evidence",
+                    httpEntity,
+                    CreateArtifactResponse.class);
+            if (response == null || response.resolveArtifactId() == null) {
+                throw new IllegalStateException("Evidence service returned no artifact id");
+            }
+            if (response.getArtifactId() == null) {
+                response.setArtifactId(response.getEvidenceId());
+            }
+            return response;
         } catch (HttpServerErrorException e) {
             if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
                 throw new EvidenceServiceUnavailableException("Evidence service unavailable", e);

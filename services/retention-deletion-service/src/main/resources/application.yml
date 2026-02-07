@@ -12,6 +12,7 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    locations: classpath:db/migration,classpath:dd/migration
 
 server:
   port: 8086
@@ -21,6 +22,9 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+audit:
+  schema: deletion
 
 # Evidence service integration and storage
 evidence:
@@ -34,3 +38,11 @@ retention:
   scheduler:
     enabled: true
     cron: "0 0 0 * * ?"  # Daily at midnight
+
+connector:
+  service:
+    url: http://localhost:8084
+
+deletion:
+  cascade:
+    systems: []

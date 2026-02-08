@@ -11,11 +11,16 @@ import com.regulyn.events.model.EventEnvelopeV1;
 import com.regulyn.events.outbox.OutboxWriter;
 import com.regulyn.incident.client.EvidenceServiceClient;
 import com.regulyn.incident.client.NotificationServiceClient;
+import com.regulyn.incident.config.IncidentCloseProperties;
 import com.regulyn.incident.dto.*;
 import com.regulyn.incident.entity.*;
+import com.regulyn.incident.exception.ApprovalRequiredException;
+import com.regulyn.incident.helper.Round2DraftLocator;
 import com.regulyn.incident.repository.*;
+import com.regulyn.incident.util.HashingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -51,6 +56,17 @@ public class IncidentService {
     private final AuditWriter auditWriter;
     private final OutboxWriter outboxWriter;
     private final ObjectMapper objectMapper;
+    private final NoticeTemplateService noticeTemplateService;
+    private final NoticeDraftService noticeDraftService;
+    private final NoticeApprovalService noticeApprovalService;
+    private final NoticeDraftRepository noticeDraftRepository;
+    private final NoticeApprovalRepository noticeApprovalRepository;
+    private final NoticeDispatchLogRepository noticeDispatchLogRepository;
+    private final Round2DraftLocator round2DraftLocator;
+    private final NoticeDispatchService noticeDispatchService;
+    private final IncidentCloseProperties closeProperties;
+    private final boolean round2NoticeBridgeEnabled;
+    private final boolean makerCheckerEnabled;
     
     public IncidentService(
             IncidentCaseRepository incidentRepository,
@@ -61,7 +77,18 @@ public class IncidentService {
             NotificationServiceClient notificationClient,
             AuditWriter auditWriter,
             OutboxWriter outboxWriter,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            NoticeTemplateService noticeTemplateService,
+            NoticeDraftService noticeDraftService,
+            NoticeApprovalService noticeApprovalService,
+            NoticeDraftRepository noticeDraftRepository,
+            NoticeApprovalRepository noticeApprovalRepository,
+            NoticeDispatchLogRepository noticeDispatchLogRepository,
+            Round2DraftLocator round2DraftLocator,
+            NoticeDispatchService noticeDispatchService,
+            IncidentCloseProperties closeProperties,
+            @Value("${incident.round2.notices.bridgeEnabled:true}") boolean round2NoticeBridgeEnabled,
+            @Value("${incident.round2.notices.makerCheckerEnabled:true}") boolean makerCheckerEnabled) {
         this.incidentRepository = incidentRepository;
         this.taskRepository = taskRepository;
         this.notificationRepository = notificationRepository;
@@ -71,6 +98,17 @@ public class IncidentService {
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
         this.objectMapper = objectMapper;
+        this.noticeTemplateService = noticeTemplateService;
+        this.noticeDraftService = noticeDraftService;
+        this.noticeApprovalService = noticeApprovalService;
+        this.noticeDraftRepository = noticeDraftRepository;
+        this.noticeApprovalRepository = noticeApprovalRepository;
+        this.noticeDispatchLogRepository = noticeDispatchLogRepository;
+        this.round2DraftLocator = round2DraftLocator;
+        this.noticeDispatchService = noticeDispatchService;
+        this.closeProperties = closeProperties;
+        this.round2NoticeBridgeEnabled = round2NoticeBridgeEnabled;
+        this.makerCheckerEnabled = makerCheckerEnabled;
     }
     
     @Transactional
@@ -190,8 +228,57 @@ public class IncidentService {
         notification.setChannel(request.channel());
         notification.setDraftText(request.draftText());
         notification.setStatus("DRAFT");
+
+        if (request.metadata() != null && !request.metadata().isEmpty()) {
+            try {
+                notification.setDispatchLog(objectMapper.writeValueAsString(request.metadata()));
+            } catch (JsonProcessingException e) {
+                notification.setDispatchLog("{}");
+            }
+        }
         
         notification = notificationRepository.save(notification);
+
+        if (round2NoticeBridgeEnabled) {
+            String templateType = "IMPACTED_USER_NOTICE";
+            String templateName = "ROUND1_DRAFT_" + request.channel();
+            NoticeTemplateEntity template = noticeTemplateService.createTemplate(
+                tenantId,
+                templateType,
+                templateName,
+                "Round-1 draft bridge for channel " + request.channel(),
+                actorId
+            );
+            NoticeTemplateVersionEntity version = noticeTemplateService.createTemplateVersion(
+                tenantId,
+                template.getId(),
+                "en",
+                request.draftText(),
+                "[]",
+                actorId
+            );
+                NoticeDraftEntity draft = noticeDraftService.createDraftForIncident(
+                tenantId,
+                incidentId,
+                version.getId(),
+                templateType,
+                version.getLanguage(),
+                Map.of(),
+                actorId
+            );
+
+                if (notification.getRound2DraftId() == null) {
+                notification.setRound2DraftId(draft.getId());
+                notificationRepository.save(notification);
+                }
+
+                noticeApprovalService.requestApprovalIfRequired(
+                    tenantId,
+                    draft.getId(),
+                    actorId,
+                    "auto-request"
+                );
+        }
         
         writeAudit(actorId, "incident.notice_drafted", "IncidentNotification", notification.getNotificationId(),
             Map.of("channel", notification.getChannel()));
@@ -227,6 +314,11 @@ public class IncidentService {
         
         if (!"DRAFT".equals(notification.getStatus())) {
             throw new IllegalStateException("Can only approve notifications in DRAFT status");
+        }
+
+        if (round2NoticeBridgeEnabled) {
+            UUID draftId = round2DraftLocator.findDraftIdForNotification(tenantId, notificationId);
+            noticeApprovalService.approveDraft(tenantId, draftId, actorId, request != null ? request.reason() : null);
         }
         
         notification.setStatus("APPROVED");
@@ -264,36 +356,137 @@ public class IncidentService {
         if (!"APPROVED".equals(notification.getStatus())) {
             throw new IllegalStateException("Can only send APPROVED notifications");
         }
-        
-        Map<String, Object> dispatchResult = notificationClient.sendNotification(
-            tenantId,
-            notification.getChannel(),
-            notification.getDraftText(),
-            notificationId
-        );
-        
-        notification.setStatus("SENT");
-        notification.setSentAt(Instant.now());
-        notification.setAttempts(notification.getAttempts() + 1);
-        
+
+        if (!round2NoticeBridgeEnabled) {
+            Map<String, Object> dispatchResult = notificationClient.sendNotification(
+                tenantId,
+                notification.getChannel(),
+                notification.getDraftText(),
+                notificationId
+            );
+
+            notification.setStatus("SENT");
+            notification.setSentAt(Instant.now());
+            notification.setAttempts(notification.getAttempts() + 1);
+
+            try {
+                notification.setDispatchLog(objectMapper.writeValueAsString(dispatchResult));
+            } catch (JsonProcessingException e) {
+                notification.setDispatchLog("{}");
+            }
+
+            notificationRepository.save(notification);
+
+            writeAudit(actorId, "incident.notice_sent", "IncidentNotification", notificationId,
+                Map.of("channel", notification.getChannel()));
+            writeOutbox(tenantId, "incident.notice_sent", Map.of(
+                "notificationId", notificationId.toString(),
+                "sentAt", notification.getSentAt().toString()
+            ));
+
+            logger.info("Sent notification {}", notificationId);
+
+            return new SendNotificationResponse(notificationId, notification.getStatus(), notification.getSentAt());
+        }
+
+        UUID draftId = null;
+        NoticeDraftEntity draft = null;
+        if (round2NoticeBridgeEnabled) {
+            draftId = round2DraftLocator.findDraftIdForNotification(tenantId, notificationId);
+            draft = noticeDraftRepository.findByIdAndTenantId(draftId, tenantId)
+                    .orElseThrow(() -> new ApprovalRequiredException("Draft not found"));
+            if (makerCheckerEnabled && !"APPROVED".equals(draft.getStatus())) {
+                throw new ApprovalRequiredException("Draft approval required before sending");
+            }
+        }
+
+        NoticeDispatchCommand dispatchCommand = buildDispatchCommand(notification, draft);
+        noticeDispatchService.dispatchDraftToTargets(tenantId, draftId, dispatchCommand, actorId);
+        int sentCount = noticeDispatchService.sendQueuedDispatchLogs(tenantId, draftId, null, dispatchCommand.subject());
+
+        if (sentCount > 0) {
+            notification.setStatus("SENT");
+            notification.setSentAt(Instant.now());
+            notification.setAttempts(notification.getAttempts() + 1);
+        }
+
         try {
-            notification.setDispatchLog(objectMapper.writeValueAsString(dispatchResult));
+            Map<String, Object> dispatchLog = new HashMap<>();
+            dispatchLog.put("sentCount", sentCount);
+            if (draftId != null) {
+                dispatchLog.put("draftId", draftId.toString());
+            }
+            if (dispatchCommand.recipients() != null && !dispatchCommand.recipients().isEmpty()) {
+                dispatchLog.put("recipients", dispatchCommand.recipients());
+            }
+            if (dispatchCommand.segmentRef() != null) {
+                dispatchLog.put("segmentRef", dispatchCommand.segmentRef());
+            }
+            if (dispatchCommand.subject() != null) {
+                dispatchLog.put("subject", dispatchCommand.subject());
+            }
+            notification.setDispatchLog(objectMapper.writeValueAsString(dispatchLog));
         } catch (JsonProcessingException e) {
             notification.setDispatchLog("{}");
         }
-        
+
         notificationRepository.save(notification);
-        
-        writeAudit(actorId, "incident.notice_sent", "IncidentNotification", notificationId,
-            Map.of("channel", notification.getChannel()));
-        writeOutbox(tenantId, "incident.notice_sent", Map.of(
-            "notificationId", notificationId.toString(),
-            "sentAt", notification.getSentAt().toString()
-        ));
-        
-        logger.info("Sent notification {}", notificationId);
-        
+
+        if (sentCount > 0) {
+            writeAudit(actorId, "incident.notice_sent", "IncidentNotification", notificationId,
+                Map.of("channel", notification.getChannel()));
+            writeOutbox(tenantId, "incident.notice_sent", Map.of(
+                "notificationId", notificationId.toString(),
+                "sentAt", notification.getSentAt().toString()
+            ));
+            logger.info("Sent notification {}", notificationId);
+        } else {
+            logger.warn("Notification {} not sent (no recipients or dispatch failure)", notificationId);
+        }
+
         return new SendNotificationResponse(notificationId, notification.getStatus(), notification.getSentAt());
+    }
+
+    private NoticeDispatchCommand buildDispatchCommand(IncidentNotification notification, NoticeDraftEntity draft) {
+        String noticeType = draft != null ? draft.getNoticeType() : "IMPACTED_USER_NOTICE";
+        String recipientType = "IMPACTED_USER";
+        if (noticeType.contains("AUTHORITY")) {
+            recipientType = "AUTHORITY";
+        } else if (noticeType.contains("BOARD")) {
+            recipientType = "BOARD";
+        }
+
+        Map<String, Object> metadata = Map.of();
+        if (notification.getDispatchLog() != null && !notification.getDispatchLog().isBlank()) {
+            try {
+                metadata = objectMapper.readValue(notification.getDispatchLog(), Map.class);
+            } catch (JsonProcessingException e) {
+                metadata = Map.of();
+            }
+        }
+
+        List<String> recipients = extractRecipients(metadata);
+        String segmentRef = metadata.get("segmentRef") != null ? metadata.get("segmentRef").toString() : null;
+        String subject = metadata.get("subject") != null ? metadata.get("subject").toString() : null;
+
+        return new NoticeDispatchCommand(recipientType, recipients, segmentRef, "EMAIL", subject);
+    }
+
+    private List<String> extractRecipients(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return List.of();
+        }
+        Object recipientsObj = metadata.get("recipients");
+        if (recipientsObj instanceof List<?> list) {
+            List<String> recipients = new ArrayList<>();
+            for (Object item : list) {
+                if (item != null) {
+                    recipients.add(item.toString());
+                }
+            }
+            return recipients;
+        }
+        return List.of();
     }
     
     @Transactional
@@ -307,22 +500,214 @@ public class IncidentService {
         if (!"CONTAINED".equals(incident.getStatus())) {
             throw new IllegalStateException("Can only close incidents in CONTAINED status");
         }
+
+        EvidenceBundleResult bundleResult = null;
+        boolean requireEvidence = closeProperties.isRequireEvidenceBundle();
+        try {
+            bundleResult = buildComplianceEvidenceBundle(incident, request, requireEvidence);
+        } catch (EvidenceServiceClient.EvidenceServiceUnavailableException ex) {
+            if (requireEvidence) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+            }
+            logger.warn("Evidence bundle creation failed but requireEvidenceBundle=false: {}", ex.getMessage());
+        }
+
+        if (requireEvidence && bundleResult == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Evidence bundle required before closing incident");
+        }
+
+        incident.setStatus("CLOSED");
+        incident.setClosedAt(Instant.now());
+        incident.setEvidenceBundleId(bundleResult != null ? bundleResult.bundleId : null);
+        incident.setClosureNotes(request.closureNotes());
         
+        incidentRepository.save(incident);
+        
+        if (bundleResult != null) {
+            writeAudit(actorId, "INCIDENT_EVIDENCE_BUNDLE_CREATED", "IncidentCase", incidentId,
+                Map.of(
+                    "bundleId", bundleResult.bundleId.toString(),
+                    "proofHash", bundleResult.proofHash
+                ));
+            writeOutbox(tenantId, "INCIDENT_EVIDENCE_BUNDLE_CREATED", Map.of(
+                "incidentId", incidentId.toString(),
+                "bundleId", bundleResult.bundleId.toString(),
+                "proofHash", bundleResult.proofHash
+            ));
+        }
+
+        writeAudit(actorId, "incident.closed", "IncidentCase", incidentId,
+            Map.of("bundleId", bundleResult != null ? bundleResult.bundleId.toString() : ""));
+        writeOutbox(tenantId, "incident.closed", Map.of(
+            "incidentId", incidentId.toString(),
+            "status", "CLOSED",
+            "bundleId", bundleResult != null ? bundleResult.bundleId.toString() : ""
+        ));
+        
+        logger.info("Closed incident {} with bundle {}", incidentId,
+            bundleResult != null ? bundleResult.bundleId : null);
+
+        return new CloseIncidentResponse(incidentId, incident.getStatus(),
+            bundleResult != null ? bundleResult.bundleId : null);
+    }
+
+    private EvidenceBundleResult buildComplianceEvidenceBundle(IncidentCase incident,
+                                                              CloseIncidentRequest request,
+                                                              boolean requireEvidence) {
+        UUID tenantId = incident.getTenantId();
+        UUID incidentId = incident.getId();
+
+        List<NoticeDraftEntity> drafts = noticeDraftRepository.findByIncidentId(incidentId);
+        List<IncidentStatusHistory> histories = historyRepository.findByIncidentId(incidentId);
+        List<IncidentTask> tasks = taskRepository.findByTenantIdAndIncidentId(tenantId, incidentId);
+
+        List<Map<String, Object>> draftProofs = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+
+        for (NoticeDraftEntity draft : drafts) {
+            Map<String, Object> draftProof = new LinkedHashMap<>();
+            draftProof.put("draft_id", draft.getId().toString());
+            draftProof.put("notice_type", draft.getNoticeType());
+            draftProof.put("template_version_id", draft.getTemplateVersionId().toString());
+            draftProof.put("rendered_sha256", draft.getRenderedSha256());
+            if (draft.getContentArtifactRef() != null) {
+                draftProof.put("content_artifact_ref", draft.getContentArtifactRef());
+            }
+            draftProof.put("status", draft.getStatus());
+            draftProof.put("created_at", draft.getCreatedAt());
+
+            if ("DRAFT".equals(draft.getStatus()) || "APPROVAL_PENDING".equals(draft.getStatus())) {
+                String missingItem = "draft_pending:" + draft.getId();
+                missing.add(missingItem);
+                if (requireEvidence) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Draft pending approval or completion: " + draft.getId());
+                }
+            }
+
+            NoticeApprovalEntity approval = noticeApprovalRepository.findByDraftId(draft.getId()).orElse(null);
+            if (approval != null) {
+                Map<String, Object> approvalProof = new LinkedHashMap<>();
+                approvalProof.put("approval_request_id", approval.getApprovalRequestId().toString());
+                approvalProof.put("status", approval.getStatus());
+                approvalProof.put("requested_by", approval.getRequestedBy());
+                approvalProof.put("requested_at", approval.getRequestedAt());
+                approvalProof.put("decided_by", approval.getDecidedBy());
+                approvalProof.put("decided_at", approval.getDecidedAt());
+                approvalProof.put("decided_comment_present", approval.getDecidedComment() != null && !approval.getDecidedComment().isBlank());
+                draftProof.put("approval", approvalProof);
+
+                boolean approvedWithin72h = approval.getDecidedAt() != null
+                        && incident.getNotifyDueAt() != null
+                        && !approval.getDecidedAt().isAfter(incident.getNotifyDueAt());
+                draftProof.put("approved_within_72h", approvedWithin72h);
+            } else {
+                draftProof.put("approved_within_72h", false);
+            }
+
+            List<NoticeDispatchLogEntity> logs = noticeDispatchLogRepository.findByDraftId(draft.getId());
+            boolean requiresDispatch = "APPROVED".equals(draft.getStatus()) || "DISPATCHED".equals(draft.getStatus());
+            if ((logs == null || logs.isEmpty()) && requiresDispatch) {
+                String missingItem = "dispatch_missing:" + draft.getId();
+                missing.add(missingItem);
+                if (requireEvidence) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Missing dispatch logs for draft " + draft.getId());
+                }
+            }
+
+            List<Map<String, Object>> dispatchProofs = new ArrayList<>();
+            if (logs != null) {
+                for (NoticeDispatchLogEntity log : logs) {
+                    Map<String, Object> dispatchProof = new LinkedHashMap<>();
+                    dispatchProof.put("dispatch_log_id", log.getId().toString());
+                    dispatchProof.put("recipient_identifier", log.getRecipientIdentifier());
+                    dispatchProof.put("channel", log.getChannel());
+                    dispatchProof.put("dispatch_payload_sha256", log.getDispatchPayloadSha256());
+                    dispatchProof.put("notification_request_id", log.getNotificationRequestId());
+                    dispatchProof.put("provider_message_id", log.getProviderMessageId());
+                    dispatchProof.put("status", log.getStatus());
+                    dispatchProof.put("queued_at", log.getQueuedAt());
+                    dispatchProof.put("sent_at", log.getSentAt());
+                    dispatchProof.put("delivered_at", log.getDeliveredAt());
+                    dispatchProof.put("failed_at", log.getFailedAt());
+                    if (log.getReceiptRef() != null) {
+                        dispatchProof.put("receipt_ref", log.getReceiptRef());
+                    }
+
+                    boolean sentWithin72h = log.getSentAt() != null
+                            && incident.getNotifyDueAt() != null
+                            && !log.getSentAt().isAfter(incident.getNotifyDueAt());
+                    boolean deliveredWithin72h = log.getDeliveredAt() != null
+                            && incident.getNotifyDueAt() != null
+                            && !log.getDeliveredAt().isAfter(incident.getNotifyDueAt());
+                    dispatchProof.put("sent_within_72h", sentWithin72h);
+                    dispatchProof.put("delivered_within_72h", deliveredWithin72h);
+                    dispatchProofs.add(dispatchProof);
+                }
+            }
+
+            draftProof.put("dispatch_logs", dispatchProofs);
+            draftProofs.add(draftProof);
+        }
+
+        List<Map<String, Object>> historyProofs = new ArrayList<>();
+        for (IncidentStatusHistory history : histories) {
+            Map<String, Object> historyProof = new LinkedHashMap<>();
+            historyProof.put("from_status", history.getFromStatus());
+            historyProof.put("to_status", history.getToStatus());
+            historyProof.put("changed_at", history.getChangedAt());
+            historyProof.put("changed_by", history.getChangedBy());
+            historyProofs.add(historyProof);
+        }
+
+        List<Map<String, Object>> taskProofs = new ArrayList<>();
+        for (IncidentTask task : tasks) {
+            Map<String, Object> taskProof = new LinkedHashMap<>();
+            taskProof.put("task_id", task.getTaskId().toString());
+            taskProof.put("task_type", task.getTaskType());
+            taskProof.put("status", task.getStatus());
+            taskProof.put("assigned_to", task.getAssignedTo());
+            taskProof.put("created_at", task.getCreatedAt());
+            taskProofs.add(taskProof);
+        }
+
+        Map<String, Object> proof = new LinkedHashMap<>();
+        proof.put("incident_id", incidentId.toString());
+        proof.put("tenant_id", tenantId.toString());
+        proof.put("opened_at", incident.getOpenedAt());
+        proof.put("sla_due_at", incident.getNotifyDueAt());
+        proof.put("status_history", historyProofs);
+        proof.put("tasks", taskProofs);
+        proof.put("drafts", draftProofs);
+        proof.put("missing", missing);
+
+        String proofJson;
+        try {
+            proofJson = objectMapper.writeValueAsString(proof);
+        } catch (JsonProcessingException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to build evidence proof");
+        }
+
+        String proofHash = HashingUtil.sha256Hex(proofJson);
+
+        Map<String, Object> evidenceMetadata = new HashMap<>();
+        evidenceMetadata.put("incidentId", incidentId.toString());
+        evidenceMetadata.put("proofHash", proofHash);
+        evidenceMetadata.put("proof", proof);
+
         UUID evidenceId = evidenceClient.createEvidence(
             tenantId,
-            "Incident closure: " + (incident.getSummary() != null ? incident.getSummary() : incidentId),
-            Map.of(
-                "incidentId", incidentId.toString(),
-                "severity", incident.getSeverity()
-            )
+            "Incident compliance proof: " + incidentId,
+            evidenceMetadata
         );
-        
+
         List<UUID> allEvidenceIds = new ArrayList<>();
         allEvidenceIds.add(evidenceId);
         if (request.includeEvidenceIds() != null) {
             allEvidenceIds.addAll(request.includeEvidenceIds());
         }
-        
+
         UUID bundleId = evidenceClient.createBundle(
             tenantId,
             "INCIDENT",
@@ -330,25 +715,47 @@ public class IncidentService {
             incidentId,
             allEvidenceIds
         );
-        
-        incident.setStatus("CLOSED");
-        incident.setClosedAt(Instant.now());
-        incident.setEvidenceBundleId(bundleId);
-        incident.setClosureNotes(request.closureNotes());
-        
-        incidentRepository.save(incident);
-        
-        writeAudit(actorId, "incident.closed", "IncidentCase", incidentId,
-            Map.of("bundleId", bundleId.toString()));
-        writeOutbox(tenantId, "incident.closed", Map.of(
-            "incidentId", incidentId.toString(),
-            "status", "CLOSED",
-            "bundleId", bundleId.toString()
-        ));
-        
-        logger.info("Closed incident {} with bundle {}", incidentId, bundleId);
-        
-        return new CloseIncidentResponse(incidentId, incident.getStatus(), bundleId);
+
+        return new EvidenceBundleResult(bundleId, evidenceId, proofHash);
+    }
+
+    private static class EvidenceBundleResult {
+        private final UUID bundleId;
+        private final UUID evidenceId;
+        private final String proofHash;
+
+        private EvidenceBundleResult(UUID bundleId, UUID evidenceId, String proofHash) {
+            this.bundleId = bundleId;
+            this.evidenceId = evidenceId;
+            this.proofHash = proofHash;
+        }
+    }
+
+    @Transactional
+    public ApproveNotificationResponse rejectNotification(UUID incidentId, UUID notificationId, ApproveNotificationRequest request) {
+        TenantContext context = TenantContextHolder.getContext();
+        UUID tenantId = context.getTenantId();
+        UUID actorId = context.getUserId();
+
+        IncidentNotification notification = notificationRepository
+                .findByTenantIdAndNotificationId(tenantId, notificationId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found"));
+
+        if (!notification.getIncidentId().equals(incidentId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Notification does not belong to incident");
+        }
+
+        if (round2NoticeBridgeEnabled) {
+            UUID draftId = round2DraftLocator.findDraftIdForNotification(tenantId, notificationId);
+            noticeApprovalService.rejectDraft(tenantId, draftId, actorId, request != null ? request.reason() : null);
+        }
+
+        notification.setStatus("REJECTED");
+        notification.setApprovedBy(actorId);
+        notification.setApprovedAt(Instant.now());
+        notificationRepository.save(notification);
+
+        return new ApproveNotificationResponse(notificationId, notification.getStatus());
     }
     
     @Transactional(readOnly = true)

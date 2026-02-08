@@ -1,37 +1,70 @@
 # Consent Service
 
-The Consent Service manages privacy notice templates, versioned content, and consent receipts for GDPR/privacy compliance workflows.
+The Consent Service manages privacy notice templates, versioned content, and consent receipts for GDPR/privacy compliance workflows. It includes a legacy consent-ingestion API and a full notice/consent workflow (v2).
 
-## Purpose
-
-- **Notice Management**: Create, version, and publish privacy notices with multi-language support
-- **Consent Tracking**: Record immutable consent receipts linking users to specific notice versions
-- **Withdrawal Handling**: Support consent withdrawal with full audit trail
-- **Content Integrity**: Hash-based verification of notice content and consent receipts
+## Scope & Purpose (Round 1)
+- **Legacy consent capture**: A minimal consent API that stores hashed notice text + receipt hash
+- **Notice management**: Create, version, and publish privacy notices with multi-language support
+- **Consent tracking**: Record immutable consent receipts linked to notice versions
+- **Withdrawal handling**: Support consent withdrawal with full audit trail
+- **Content integrity**: Hash-based verification of notice content and consent receipts
+- **Audit + Outbox**: All critical actions emit audit + outbox events
 
 ## Architecture
 
-### Database Schema (consent schema)
-- `notice_templates`: Notice definitions by purpose (e.g., "marketing", "analytics")
-- `notice_versions`: Versioned notice content with DRAFT/PUBLISHED/RETIRED lifecycle
-- `notice_language_text`: Multi-language content with SHA-256 hashes
-- `consent_receipts`: Immutable consent records linking to notice versions
-- `consent_status_history`: Audit trail of consent status changes
+### Database Schema (schema: `consent`)
+- `consent_records` (legacy consent capture)
+- `notice_templates`
+- `notice_versions`
+- `notice_language_text`
+- `consent_receipts`
+- `consent_status_history`
+- `purpose_versions` (Round 2 Part 1)
+- `purpose_version_history` (Round 2 Part 1)
+- `communication_consent_ledger` (Round 2 Part 1)
+- `consent_invalidations` (Round 2 Part 1)
+- `reconsent_requirements` (Round 2 Part 1)
+- `outbox_events`
+- `audit_events`
 
 ### Business Rules
-1. **Single Published Version**: Only one PUBLISHED version per notice at a time; publishing a new version automatically retires the previous one
-2. **Immutable Published Content**: Cannot modify language text for PUBLISHED versions; requires creating a new version
+1. **Single Published Version**: Only one PUBLISHED version per notice at a time; publishing a new version retires the previous one
+2. **Immutable Published Content**: Cannot modify language text for PUBLISHED versions; create a new version instead
 3. **Active Notice Requirement**: Consent grants require an active PUBLISHED notice for the purpose
-4. **Idempotency**: Duplicate consent grants with same idempotencyKey return existing receipt
+4. **Idempotency**: Duplicate grants with same `idempotencyKey` return existing receipt
 5. **Withdrawal**: Only GRANTED consents can be withdrawn; creates history record
 
-## API Endpoints
+## API Surfaces
 
-### Notice Management
+### Legacy Consent API (Round 1, minimal)
+Base path: `/consents`
+
+#### Create Consent Record
+```bash
+curl -X POST http://localhost:8082/consents \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: <tenant-uuid>" \
+  -d '{
+    "userId": "user-uuid",
+    "purpose": "marketing",
+    "language": "en",
+    "noticeText": "full notice text",
+    "source": "WIDGET"
+  }'
+
+Response: {"receiptId": "uuid", "payloadHash": "sha256-hash"}
+```
+
+Notes:
+- Stores hashed notice text (no raw notice in outbox).
+- Emits `consent.created` outbox event.
+
+### Notice + Consent Workflow API (v2)
+Base path: `/api/v2/consent`
 
 #### 1. Create Notice Template
 ```bash
-curl -X POST http://localhost:8082/notices \
+curl -X POST http://localhost:8082/api/v2/consent/notices \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: <tenant-uuid>" \
   -d '{
@@ -46,7 +79,7 @@ Response: {"noticeId": "uuid"}
 
 #### 2. Create Version
 ```bash
-curl -X POST http://localhost:8082/notices/{noticeId}/versions \
+curl -X POST http://localhost:8082/api/v2/consent/notices/{noticeId}/versions \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: <tenant-uuid>" \
   -d '{
@@ -58,7 +91,7 @@ Response: {"versionId": "uuid", "versionNumber": 1}
 
 #### 3. Add Language Content
 ```bash
-curl -X POST http://localhost:8082/notices/{noticeId}/versions/{versionId}/languages \
+curl -X POST http://localhost:8082/api/v2/consent/notices/{noticeId}/versions/{versionId}/languages \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: <tenant-uuid>" \
   -d '{
@@ -71,7 +104,7 @@ Response: {"languageId": "uuid", "contentHash": "sha256-hash"}
 
 #### 4. Publish Version
 ```bash
-curl -X POST http://localhost:8082/notices/{noticeId}/versions/{versionId}/publish \
+curl -X POST http://localhost:8082/api/v2/consent/notices/{noticeId}/versions/{versionId}/publish \
   -H "X-Tenant-Id: <tenant-uuid>"
 
 Response: {"published": true, "publishedAt": "2026-01-31T..."}
@@ -79,7 +112,7 @@ Response: {"published": true, "publishedAt": "2026-01-31T..."}
 
 #### 5. Get Active Notice
 ```bash
-curl -X GET "http://localhost:8082/notices/active?purpose=marketing&language=en" \
+curl -X GET "http://localhost:8082/api/v2/consent/notices/active?purpose=marketing&language=en" \
   -H "X-Tenant-Id: <tenant-uuid>"
 
 Response: {
@@ -94,11 +127,9 @@ Response: {
 }
 ```
 
-### Consent Management
-
 #### 6. Grant Consent
 ```bash
-curl -X POST http://localhost:8082/consents \
+curl -X POST http://localhost:8082/api/v2/consent/consents \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: <tenant-uuid>" \
   -d '{
@@ -121,7 +152,7 @@ Response: {
 
 #### 7. Withdraw Consent
 ```bash
-curl -X POST http://localhost:8082/consents/{receiptId}/withdraw \
+curl -X POST http://localhost:8082/api/v2/consent/consents/{receiptId}/withdraw \
   -H "Content-Type: application/json" \
   -H "X-Tenant-Id: <tenant-uuid>" \
   -d '{
@@ -137,132 +168,110 @@ Response: {
 
 #### 8. List Consents
 ```bash
-# All consents for a data principal
-curl -X GET "http://localhost:8082/consents?dataPrincipalId=user-uuid" \
+curl -X GET "http://localhost:8082/api/v2/consent/consents?dataPrincipalId=user-uuid" \
   -H "X-Tenant-Id: <tenant-uuid>"
 
-# Filter by purpose
-curl -X GET "http://localhost:8082/consents?dataPrincipalId=user-uuid&purpose=marketing" \
+curl -X GET "http://localhost:8082/api/v2/consent/consents?dataPrincipalId=user-uuid&purpose=marketing" \
   -H "X-Tenant-Id: <tenant-uuid>"
-
-Response: [
-  {
-    "receiptId": "uuid",
-    "dataPrincipalId": "uuid",
-    "purpose": "marketing",
-    "source": "WIDGET",
-    "status": "GRANTED",
-    "noticeId": "uuid",
-    "versionId": "uuid",
-    "versionNumber": 1,
-    "language": "en",
-    "contentHash": "sha256-hash",
-    "receiptHash": "sha256-hash",
-    "clientRef": "...",
-    "grantedAt": "...",
-    "withdrawnAt": null
-  }
-]
 ```
 
-## Event Types
+## Event Types (Outbox)
+- `consent.created` (legacy consent capture)
+- `notice.created`
+- `notice.version_created`
+- `notice.language_added`
+- `notice.published`
+- `consent.granted`
+- `consent.withdrawn`
 
-All actions emit events to the `outbox_events` table for downstream consumers:
+Event payloads include IDs, hashes, and timestamps but not full notice content.
 
-- `notice.created`: New notice template created
-- `notice.version_created`: New version created for notice
-- `notice.language_added`: Language content added to version
-- `notice.published`: Version published (retires previous published version)
-- `consent.granted`: Consent granted by data principal
-- `consent.withdrawn`: Consent withdrawn
+## Evidence Linking (Schema Fields)
+- `notice_versions.evidence_id` (nullable)
+- `consent_receipts.withdraw_evidence_id` (nullable)
+- `consent_receipts.evidence_artifact_id` (Round 2 Part 1, nullable)
 
-Event payloads include IDs, hashes, and timestamps but **not full content** to keep events lightweight.
+No evidence service client is wired yet; fields are reserved for Round 2.
+
+## Configuration
+```yaml
+spring:
+  application:
+    name: consent-service
+  datasource:
+    url: ${spring.datasource.url:jdbc:postgresql://localhost:5432/consent}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    schemas: consent
+
+server:
+  port: 8082
+```
+
+## Round 2 Part 1 (Persistence Only)
+Added schema structures and entity mappings for:
+- Purpose versioning (`purpose_versions`, `purpose_version_history`)
+- Communication consent ledger (`communication_consent_ledger`)
+- Consent invalidations (`consent_invalidations`)
+- Reconsent requirements (`reconsent_requirements`)
+- New nullable linkage fields on `consent_receipts`:
+  - `purpose_version_id`
+  - `language_code`
+  - `notice_language_text_id`
+  - `notice_content_hash_sha256`
+  - `evidence_artifact_id`
+
+No Round 2 business logic or APIs are added yet.
+
+## Multi-Tenancy
+- Tenant scoped via `X-Tenant-Id` (or JWT claims)
+- Tenant ID + Actor ID are sourced from `TenantContextHolder`
+
+## Content Integrity
+- **Content Hash**: SHA-256 of notice text content
+- **Receipt Hash**: SHA-256 of canonical receipt data (tenantId|dataPrincipalId|versionId|contentHash)
+- **Payload Hash**: SHA-256 used in legacy `consent_records`
+
+## Testing
+- `ConsentServiceOutboxTest`
+- `ConsentWorkflowIntegrationTest` (Testcontainers PostgreSQL)
+- `ConsentSchemaRound2Part1MigrationIT` (Testcontainers schema validation)
+
+## Round 2 Final Closure Checks (Confirmed)
+1) **E2E fail-closed**
+  - Widening → validity false until re-grant
+  - Translation unavailable → `/active-dual` fails, grant fails, no rows inserted
+2) **DB writes asserted in E2E** (audit + outbox via SQL against Testcontainers Postgres)
+3) **No raw content in audit/outbox** (payload text does not include notice content)
+4) **Idempotency verified**
+  - Grant `idempotencyKey` returns same receipt
+  - Comm ledger dedupe returns same ledger row and no duplicate events
+5) **Backward compatibility**
+  - Round-1 legacy consent + v2 basic flow tests green
+6) **Docs are specific**
+  - Region→language mapping, fail-closed rules, event list, test commands, deployment checklist
 
 ## Running Locally
-
-### Prerequisites
-- PostgreSQL running (or use Docker Compose)
-- Java 21
-- Maven
-
-### Start Service
 ```bash
 cd services/consent-service
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-Service runs on port **8082** by default.
-
-### Database
-- Schema: `consent`
-- Flyway migrations automatically create tables on startup
-- Migrations location: `src/main/resources/db/migration`
-
-### Configuration
-```yaml
-# application.yml
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/regulyn
-    username: regulyn
-    password: regulyn
-  jpa:
-    hibernate:
-      ddl-auto: validate  # Strict validation
-  flyway:
-    enabled: true
-    schemas: consent
-```
-
-## Evidence Linking (Optional)
-
-The service supports optional evidence recording for compliance auditing:
-
-- **Notice Publishing**: When a version is published, an evidence record can be created
-- **Consent Withdrawal**: Withdrawal actions can generate evidence records
-
-Evidence integration is **optional** and gracefully degrades if evidence service is unavailable. Evidence IDs are stored in:
-- `notice_versions.evidence_id` (nullable)
-- `consent_receipts.withdraw_evidence_id` (nullable)
-
-## Testing
-
-Integration tests use Testcontainers PostgreSQL:
-
-```bash
-mvn test
-```
-
-Key test scenarios:
-- Notice publish flow with version retirement
-- Consent grant with idempotency
-- Consent withdrawal with history tracking
-- Multi-purpose consent listing
-
-## Multi-Tenancy
-
-All operations are tenant-scoped using `X-Tenant-Id` header or JWT claims. Tenant ID is automatically extracted from `TenantContextHolder` and used in all queries.
-
-## Content Integrity
-
-- **Content Hash**: SHA-256 of notice text content
-- **Receipt Hash**: SHA-256 of canonical receipt data (tenantId|dataPrincipalId|versionId|contentHash)
-- Hashes enable verification of consent authenticity and detect tampering
-
 ## Troubleshooting
-
 **"No published version found for purpose"**
-- Ensure you've published a version for the purpose: `POST /notices/{id}/versions/{versionId}/publish`
+- Publish a version: `POST /api/v2/consent/notices/{id}/versions/{versionId}/publish`
 
 **"Cannot modify published version content"**
-- Published versions are immutable; create a new version instead
+- Create a new version instead
 
 **"Can only withdraw consents with GRANTED status"**
-- Check consent status; already withdrawn consents cannot be withdrawn again
+- Withdraw only GRANTED receipts
 
 **Idempotency not working**
-- Ensure `idempotencyKey` is consistent across retries
-- Key is scoped to (tenant, dataPrincipal, purpose, idempotencyKey)
+- Ensure `idempotencyKey` matches for retries
 
 ## Tech Stack
 - Java 21

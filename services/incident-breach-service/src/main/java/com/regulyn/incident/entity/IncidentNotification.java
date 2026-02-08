@@ -46,6 +46,9 @@ public class IncidentNotification {
     @JdbcTypeCode(SqlTypes.JSON)
     private String dispatchLog = "{}";
 
+    @Column(name = "round2_draft_id")
+    private UUID round2DraftId;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -92,6 +95,9 @@ public class IncidentNotification {
 
     public String getDispatchLog() { return dispatchLog; }
     public void setDispatchLog(String dispatchLog) { this.dispatchLog = dispatchLog; }
+
+    public UUID getRound2DraftId() { return round2DraftId; }
+    public void setRound2DraftId(UUID round2DraftId) { this.round2DraftId = round2DraftId; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

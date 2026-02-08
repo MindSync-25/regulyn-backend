@@ -11,20 +11,14 @@ import com.regulyn.incident.repository.IncidentCaseRepository;
 import com.regulyn.incident.repository.IncidentNotificationRepository;
 import com.regulyn.incident.repository.IncidentTaskRepository;
 import com.regulyn.incident.service.IncidentOverdueScheduler;
-import jakarta.servlet.*;
-import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -39,62 +33,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(TestSecurityConfiguration.class)
 @Testcontainers
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class IncidentWorkflowComprehensiveTest {
-
-    @TestConfiguration
-    static class TestSecurityConfig {
-        @Bean
-        public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            http
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
-            return http.build();
-        }
-        
-        @Bean
-        public FilterRegistrationBean<TestTenantFilter> testTenantFilter() {
-            FilterRegistrationBean<TestTenantFilter> registrationBean = new FilterRegistrationBean<>();
-            registrationBean.setFilter(new TestTenantFilter());
-            registrationBean.addUrlPatterns("/*");
-            registrationBean.setOrder(1);
-            return registrationBean;
-        }
-    }
-    
-    static class TestTenantFilter implements Filter {
-        @Override
-        public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
-                throws IOException, ServletException {
-            try {
-                HttpServletRequest httpRequest = (HttpServletRequest) request;
-                String tenantIdHeader = httpRequest.getHeader("X-Tenant-ID");
-                String actorIdHeader = httpRequest.getHeader("X-Actor-ID");
-                String actorRoleHeader = httpRequest.getHeader("X-Actor-Role");
-                
-                TenantContext context = new TenantContext();
-                context.setRequestId(UUID.randomUUID().toString());
-                context.setTraceId(UUID.randomUUID().toString());
-                
-                if (tenantIdHeader != null && !tenantIdHeader.isBlank()) {
-                    context.setTenantId(UUID.fromString(tenantIdHeader));
-                }
-                if (actorIdHeader != null && !actorIdHeader.isBlank()) {
-                    context.setUserId(UUID.fromString(actorIdHeader));
-                }
-                if (actorRoleHeader != null && !actorRoleHeader.isBlank()) {
-                    context.setRoles(Set.of(actorRoleHeader));
-                }
-                
-                TenantContextHolder.setContext(context);
-                chain.doFilter(request, response);
-            } finally {
-                TenantContextHolder.clear();
-            }
-        }
-    }
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
@@ -279,7 +222,7 @@ class IncidentWorkflowComprehensiveTest {
         DraftNotificationRequest draftRequest = new DraftNotificationRequest(
             "EMAIL",
             "Dear user, we detected a privacy incident...",
-            Map.of("recipient", "user@example.com")
+            Map.of("recipients", List.of("user@example.com"))
         );
         ResponseEntity<DraftNotificationResponse> draftResponse = restTemplate.exchange(
             "/incidents/" + incidentId + "/notifications/draft",
@@ -303,10 +246,12 @@ class IncidentWorkflowComprehensiveTest {
 
         // Act 3 - Approve notification
         ApproveNotificationRequest approveRequest = new ApproveNotificationRequest("Reviewed and approved");
+        HttpHeaders approverHeaders = createHeaders();
+        approverHeaders.set("X-Actor-ID", UUID.randomUUID().toString());
         ResponseEntity<ApproveNotificationResponse> approveResponse = restTemplate.exchange(
             "/incidents/" + incidentId + "/notifications/" + notificationId + "/approve",
             HttpMethod.POST,
-            new HttpEntity<>(approveRequest, createHeaders()),
+            new HttpEntity<>(approveRequest, approverHeaders),
             ApproveNotificationResponse.class
         );
         

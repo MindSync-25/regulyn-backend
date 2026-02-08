@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.regulyn.auth.context.TenantContextHolder;
 import com.regulyn.common.audit.AuditEvent;
 import com.regulyn.common.audit.AuditWriter;
+import com.regulyn.consent.client.TranslationClient;
 import com.regulyn.consent.entity.*;
 import com.regulyn.consent.model.*;
 import com.regulyn.consent.repository.*;
@@ -13,8 +14,10 @@ import com.regulyn.events.outbox.OutboxWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -22,6 +25,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 
 @Service
 public class NoticeManagementService {
@@ -33,8 +40,12 @@ public class NoticeManagementService {
     private final NoticeLanguageTextRepository noticeLanguageTextRepository;
     private final ConsentReceiptRepository consentReceiptRepository;
     private final ConsentStatusHistoryRepository consentStatusHistoryRepository;
+    private final PurposeVersionRepository purposeVersionRepository;
+    private final ReconsentRequirementRepository reconsentRequirementRepository;
+    private final PurposeVersionService purposeVersionService;
     private final AuditWriter auditWriter;
     private final OutboxWriter outboxWriter;
+    private final TranslationClient translationClient;
     private final ObjectMapper objectMapper;
     private final String serviceName;
     
@@ -44,8 +55,12 @@ public class NoticeManagementService {
             NoticeLanguageTextRepository noticeLanguageTextRepository,
             ConsentReceiptRepository consentReceiptRepository,
             ConsentStatusHistoryRepository consentStatusHistoryRepository,
+            PurposeVersionRepository purposeVersionRepository,
+            ReconsentRequirementRepository reconsentRequirementRepository,
+            PurposeVersionService purposeVersionService,
             AuditWriter auditWriter,
             OutboxWriter outboxWriter,
+            TranslationClient translationClient,
             ObjectMapper objectMapper,
             @Value("${spring.application.name:consent-service}") String serviceName) {
         this.noticeTemplateRepository = noticeTemplateRepository;
@@ -53,8 +68,12 @@ public class NoticeManagementService {
         this.noticeLanguageTextRepository = noticeLanguageTextRepository;
         this.consentReceiptRepository = consentReceiptRepository;
         this.consentStatusHistoryRepository = consentStatusHistoryRepository;
+        this.purposeVersionRepository = purposeVersionRepository;
+        this.reconsentRequirementRepository = reconsentRequirementRepository;
+        this.purposeVersionService = purposeVersionService;
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
+        this.translationClient = translationClient;
         this.objectMapper = objectMapper;
         this.serviceName = serviceName;
     }
@@ -204,6 +223,13 @@ public class NoticeManagementService {
     public AddLanguageResponse addLanguage(UUID noticeId, UUID versionId, AddLanguageRequest request) {
         UUID tenantId = TenantContextHolder.getTenantId();
         UUID userId = TenantContextHolder.getUserId();
+
+        NoticeTemplate notice = noticeTemplateRepository.findById(noticeId)
+            .orElseThrow(() -> new IllegalArgumentException("Notice not found: " + noticeId));
+
+        if (!notice.getTenantId().equals(tenantId)) {
+            throw new IllegalArgumentException("Notice not found for this tenant");
+        }
         
         NoticeVersion version = noticeVersionRepository.findByTenantIdAndVersionId(tenantId, versionId)
             .orElseThrow(() -> new IllegalArgumentException("Version not found"));
@@ -282,8 +308,20 @@ public class NoticeManagementService {
     
     @Transactional
     public PublishVersionResponse publishVersion(UUID noticeId, UUID versionId) {
+        return publishVersion(noticeId, versionId, null);
+    }
+
+    @Transactional
+    public PublishVersionResponse publishVersion(UUID noticeId, UUID versionId, PublishVersionRequest request) {
         UUID tenantId = TenantContextHolder.getTenantId();
         UUID userId = TenantContextHolder.getUserId();
+
+        NoticeTemplate notice = noticeTemplateRepository.findById(noticeId)
+            .orElseThrow(() -> new IllegalArgumentException("Notice not found: " + noticeId));
+
+        if (!notice.getTenantId().equals(tenantId)) {
+            throw new IllegalArgumentException("Notice not found for this tenant");
+        }
         
         NoticeVersion version = noticeVersionRepository.findByTenantIdAndVersionId(tenantId, versionId)
             .orElseThrow(() -> new IllegalArgumentException("Version not found"));
@@ -293,7 +331,12 @@ public class NoticeManagementService {
         }
         
         if ("PUBLISHED".equals(version.getStatus())) {
-            throw new IllegalStateException("Version is already published");
+            Optional<PurposeVersion> existingPurposeVersion = purposeVersionRepository
+                .findByTenantIdAndNoticeVersionIdAndPurposeKey(tenantId, versionId, notice.getPurpose());
+            if (existingPurposeVersion.isEmpty() && request != null) {
+                purposeVersionService.ensurePurposeVersionOnPublish(notice, version, request.purposeScope());
+            }
+            return new PublishVersionResponse(true, version.getPublishedAt());
         }
         
         // Business rule: Retire any existing PUBLISHED version for this notice
@@ -310,6 +353,9 @@ public class NoticeManagementService {
         version.setStatus("PUBLISHED");
         version.setPublishedAt(publishedAt);
         version = noticeVersionRepository.save(version);
+
+        purposeVersionService.ensurePurposeVersionOnPublish(notice, version,
+            request != null ? request.purposeScope() : null);
         
         String versionIdStr = versionId.toString();
         String publishHash = computeSHA256(noticeId.toString() + ":" + version.getVersionNumber() + ":PUBLISHED");
@@ -390,6 +436,56 @@ public class NoticeManagementService {
             publishedVersion.getPublishedAt()
         );
     }
+
+    @Transactional
+    public ActiveDualNoticeResponse getActiveNoticeDual(String purpose, String region) {
+        if (region == null || region.isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "region is required");
+        }
+
+        UUID tenantId = TenantContextHolder.getTenantId();
+
+        NoticeTemplate notice = noticeTemplateRepository.findByTenantIdAndPurpose(tenantId, purpose)
+            .orElseThrow(() -> new IllegalArgumentException("No notice found for purpose: " + purpose));
+
+        NoticeVersion publishedVersion = noticeVersionRepository
+            .findByTenantIdAndNoticeIdAndStatus(tenantId, notice.getNoticeId(), "PUBLISHED")
+            .orElseThrow(() -> new IllegalArgumentException("No published version found for purpose: " + purpose));
+
+        NoticeLanguageText englishText = noticeLanguageTextRepository
+            .findByTenantIdAndVersionIdAndLanguage(tenantId, publishedVersion.getVersionId(), "en")
+            .orElseThrow(() -> new ResponseStatusException(CONFLICT, "English content missing for published version"));
+
+        String regionalLanguage = mapRegionToLanguage(region);
+        NoticeLanguageText regionalText = ensureRegionalLanguageText(
+            tenantId,
+            notice.getNoticeId(),
+            publishedVersion.getVersionId(),
+            regionalLanguage,
+            englishText
+        );
+
+        return new ActiveDualNoticeResponse(
+            notice.getNoticeId(),
+            publishedVersion.getVersionId(),
+            publishedVersion.getVersionNumber(),
+            notice.getPurpose(),
+            region.toUpperCase(Locale.ROOT),
+            new ActiveDualNoticeResponse.LanguageSnapshot(
+                "en",
+                englishText.getLanguageId(),
+                englishText.getContent(),
+                englishText.getContentHash()
+            ),
+            new ActiveDualNoticeResponse.LanguageSnapshot(
+                regionalLanguage,
+                regionalText.getLanguageId(),
+                regionalText.getContent(),
+                regionalText.getContentHash()
+            ),
+            publishedVersion.getPublishedAt()
+        );
+    }
     
     @Transactional
     public GrantConsentResponse grantConsent(GrantConsentRequest request) {
@@ -409,17 +505,40 @@ public class NoticeManagementService {
                     receipt.getStatus(),
                     receipt.getReceiptHash(),
                     receipt.getVersionId(),
-                    receipt.getContentHash()
+                    receipt.getContentHash(),
+                    receipt.getPurposeVersionId()
                 );
             }
         }
         
-        // Fetch active published notice
-        ActiveNoticeResponse activeNotice = getActiveNotice(request.purpose(), request.language());
+        String region = request.region();
+        ActiveNoticeResponse activeNotice = null;
+        ActiveDualNoticeResponse dualNotice = null;
+        if (region != null && !region.isBlank()) {
+            dualNotice = getActiveNoticeDual(request.purpose(), region);
+        } else {
+            // Fetch active published notice
+            activeNotice = getActiveNotice(request.purpose(), request.language());
+        }
+
+        UUID noticeVersionId = dualNotice != null ? dualNotice.versionId() : activeNotice.versionId();
+
+        PurposeVersion purposeVersion = purposeVersionRepository
+            .findByTenantIdAndNoticeVersionIdAndPurposeKey(tenantId, noticeVersionId, request.purpose())
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT,
+                "Purpose version missing; publish required"));
+
+        NoticeLanguageText languageText = null;
+        if (dualNotice == null) {
+            languageText = noticeLanguageTextRepository
+                .findByTenantIdAndVersionIdAndLanguage(tenantId, activeNotice.versionId(), activeNotice.language())
+                .orElse(null);
+        }
         
         // Compute receipt hash
-        String receiptHash = computeReceiptHash(tenantId, request.dataPrincipalId(), 
-            activeNotice.versionId(), activeNotice.contentHash());
+        String receiptHash = computeReceiptHash(tenantId, request.dataPrincipalId(),
+            noticeVersionId, dualNotice != null ? dualNotice.regional().contentHash() : activeNotice.contentHash());
         
         ConsentReceiptEntity receipt = new ConsentReceiptEntity();
         receipt.setTenantId(tenantId);
@@ -427,14 +546,27 @@ public class NoticeManagementService {
         receipt.setPurpose(request.purpose());
         receipt.setSource(request.source());
         receipt.setStatus("GRANTED");
-        receipt.setNoticeId(activeNotice.noticeId());
-        receipt.setVersionId(activeNotice.versionId());
-        receipt.setVersionNumber(activeNotice.versionNumber());
-        receipt.setLanguage(activeNotice.language());
-        receipt.setContentHash(activeNotice.contentHash());
+        receipt.setNoticeId(dualNotice != null ? dualNotice.noticeId() : activeNotice.noticeId());
+        receipt.setVersionId(noticeVersionId);
+        receipt.setVersionNumber(dualNotice != null ? dualNotice.versionNumber() : activeNotice.versionNumber());
+        receipt.setLanguage(dualNotice != null ? dualNotice.regional().language() : activeNotice.language());
+        receipt.setContentHash(dualNotice != null ? dualNotice.regional().contentHash() : activeNotice.contentHash());
         receipt.setReceiptHash(receiptHash);
         receipt.setClientRef(request.clientRef());
         receipt.setIdempotencyKey(request.idempotencyKey());
+        receipt.setPurposeVersionId(purposeVersion.getId());
+        receipt.setLanguageCode(dualNotice != null ? dualNotice.regional().language() : activeNotice.language());
+        receipt.setNoticeLanguageTextId(dualNotice != null ? dualNotice.regional().languageTextId() : (languageText != null ? languageText.getLanguageId() : null));
+        receipt.setNoticeContentHashSha256(dualNotice != null ? dualNotice.regional().contentHash() : activeNotice.contentHash());
+
+        if (dualNotice != null) {
+            receipt.setRegionCode(dualNotice.region());
+            receipt.setEnglishLanguageCode(dualNotice.english().language());
+            receipt.setEnglishNoticeLanguageTextId(dualNotice.english().languageTextId());
+            receipt.setEnglishContentHashSha256(dualNotice.english().contentHash());
+            receipt.setRegionalNoticeLanguageTextId(dualNotice.regional().languageTextId());
+            receipt.setRegionalContentHashSha256(dualNotice.regional().contentHash());
+        }
         
         receipt = consentReceiptRepository.save(receipt);
         
@@ -467,10 +599,18 @@ public class NoticeManagementService {
         payload.put("dataPrincipalId", request.dataPrincipalId().toString());
         payload.put("purpose", request.purpose());
         payload.put("source", request.source());
-        payload.put("versionId", activeNotice.versionId().toString());
-        payload.put("contentHash", activeNotice.contentHash());
+        payload.put("versionId", noticeVersionId.toString());
+        payload.put("contentHash", dualNotice != null ? dualNotice.regional().contentHash() : activeNotice.contentHash());
         payload.put("receiptHash", receiptHash);
         payload.put("grantedAt", receipt.getGrantedAt().toString());
+        payload.put("purposeVersionId", purposeVersion.getId().toString());
+        payload.put("languageCode", dualNotice != null ? dualNotice.regional().language() : activeNotice.language());
+        if (dualNotice != null) {
+            payload.put("noticeLanguageTextId", dualNotice.regional().languageTextId().toString());
+            payload.put("regionCode", dualNotice.region());
+        } else if (languageText != null) {
+            payload.put("noticeLanguageTextId", languageText.getLanguageId().toString());
+        }
         
         EventEnvelopeV1 envelope = new EventEnvelopeV1();
         envelope.setEventId(UUID.randomUUID());
@@ -487,14 +627,216 @@ public class NoticeManagementService {
         envelope.setCorrelationId(TenantContextHolder.getRequestId());
         
         outboxWriter.write(envelope);
+
+        if (dualNotice != null) {
+            ObjectNode snapshotPayload = objectMapper.createObjectNode();
+            snapshotPayload.put("tenantId", tenantId.toString());
+            snapshotPayload.put("receiptId", receiptIdStr);
+            snapshotPayload.put("noticeId", receipt.getNoticeId().toString());
+            snapshotPayload.put("versionId", receipt.getVersionId().toString());
+            snapshotPayload.put("regionCode", dualNotice.region());
+            snapshotPayload.put("englishLanguage", dualNotice.english().language());
+            snapshotPayload.put("englishLanguageTextId", dualNotice.english().languageTextId().toString());
+            snapshotPayload.put("englishContentHash", dualNotice.english().contentHash());
+            snapshotPayload.put("regionalLanguage", dualNotice.regional().language());
+            snapshotPayload.put("regionalLanguageTextId", dualNotice.regional().languageTextId().toString());
+            snapshotPayload.put("regionalContentHash", dualNotice.regional().contentHash());
+
+            String snapshotHash = computeSHA256(receiptIdStr + ":CONSENT_LANGUAGE_SNAPSHOT_STORED");
+
+            AuditEvent snapshotAudit = AuditEvent.builder()
+                .tenantId(tenantId)
+                .actorId(userId)
+                .actorType(AuditEvent.ActorType.USER)
+                .service(serviceName)
+                .action("CONSENT_LANGUAGE_SNAPSHOT_STORED")
+                .entityType("consent_receipt")
+                .entityId(receiptIdStr)
+                .payloadHash(snapshotHash)
+                .metadata(snapshotPayload)
+                .build();
+            auditWriter.write(snapshotAudit);
+
+            EventEnvelopeV1 snapshotEnvelope = new EventEnvelopeV1();
+            snapshotEnvelope.setEventId(UUID.randomUUID());
+            snapshotEnvelope.setEventType("CONSENT_LANGUAGE_SNAPSHOT_STORED");
+            snapshotEnvelope.setTenantId(tenantId);
+            snapshotEnvelope.setActorId(userId);
+            snapshotEnvelope.setActorType(com.regulyn.events.model.ActorType.USER);
+            snapshotEnvelope.setSourceService(serviceName);
+            snapshotEnvelope.setEntityType("consent_receipt");
+            snapshotEnvelope.setEntityId(receiptIdStr);
+            snapshotEnvelope.setOccurredAt(Instant.now());
+            snapshotEnvelope.setPayload(snapshotPayload);
+            snapshotEnvelope.setPayloadHash(snapshotHash);
+            snapshotEnvelope.setCorrelationId(TenantContextHolder.getRequestId());
+            outboxWriter.write(snapshotEnvelope);
+        }
         
+        Optional<ReconsentRequirement> requirement = reconsentRequirementRepository
+            .findByTenantIdAndDataPrincipalIdAndRequiredPurposeVersionId(
+                tenantId, request.dataPrincipalId(), purposeVersion.getId());
+        if (requirement.isPresent() && requirement.get().getStatus() == ReconsentStatus.REQUIRED) {
+            ReconsentRequirement existing = requirement.get();
+            existing.setStatus(ReconsentStatus.SATISFIED);
+            existing.setSatisfiedAt(Instant.now());
+            existing.setSatisfiedByConsentReceiptId(receipt.getReceiptId());
+            reconsentRequirementRepository.save(existing);
+
+            ObjectNode satisfiedPayload = objectMapper.createObjectNode();
+            satisfiedPayload.put("tenantId", tenantId.toString());
+            satisfiedPayload.put("dataPrincipalId", request.dataPrincipalId().toString());
+            satisfiedPayload.put("requiredPurposeVersionId", purposeVersion.getId().toString());
+            satisfiedPayload.put("consentReceiptId", receipt.getReceiptId().toString());
+            satisfiedPayload.put("satisfiedAt", existing.getSatisfiedAt().toString());
+
+            String satisfiedHash = computeSHA256(receipt.getReceiptId().toString() + ":RECONSENT_SATISFIED");
+            AuditEvent satisfiedAudit = AuditEvent.builder()
+                .tenantId(tenantId)
+                .actorId(userId)
+                .actorType(AuditEvent.ActorType.USER)
+                .service(serviceName)
+                .action("RECONSENT_SATISFIED")
+                .entityType("reconsent_requirement")
+                .entityId(existing.getId().toString())
+                .payloadHash(satisfiedHash)
+                .metadata(satisfiedPayload)
+                .build();
+            auditWriter.write(satisfiedAudit);
+
+            EventEnvelopeV1 satisfiedEnvelope = new EventEnvelopeV1();
+            satisfiedEnvelope.setEventId(UUID.randomUUID());
+            satisfiedEnvelope.setEventType("RECONSENT_SATISFIED");
+            satisfiedEnvelope.setTenantId(tenantId);
+            satisfiedEnvelope.setActorId(userId);
+            satisfiedEnvelope.setActorType(com.regulyn.events.model.ActorType.USER);
+            satisfiedEnvelope.setSourceService(serviceName);
+            satisfiedEnvelope.setEntityType("reconsent_requirement");
+            satisfiedEnvelope.setEntityId(existing.getId().toString());
+            satisfiedEnvelope.setOccurredAt(Instant.now());
+            satisfiedEnvelope.setPayload(satisfiedPayload);
+            satisfiedEnvelope.setPayloadHash(satisfiedHash);
+            satisfiedEnvelope.setCorrelationId(TenantContextHolder.getRequestId());
+            outboxWriter.write(satisfiedEnvelope);
+        }
+
         return new GrantConsentResponse(
             receipt.getReceiptId(),
             "GRANTED",
             receiptHash,
-            activeNotice.versionId(),
-            activeNotice.contentHash()
+            noticeVersionId,
+            dualNotice != null ? dualNotice.regional().contentHash() : activeNotice.contentHash(),
+            purposeVersion.getId()
         );
+    }
+
+    private String mapRegionToLanguage(String region) {
+        String normalized = region.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "KA" -> "kn";
+            case "TN" -> "ta";
+            case "TS", "AP" -> "te";
+            case "KL" -> "ml";
+            case "MH" -> "mr";
+            case "WB" -> "bn";
+            case "GJ" -> "gu";
+            case "PB" -> "pa";
+            case "OD", "OR" -> "or";
+            case "AS" -> "as";
+            default -> "hi";
+        };
+    }
+
+    private NoticeLanguageText ensureRegionalLanguageText(UUID tenantId,
+                                                         UUID noticeId,
+                                                         UUID versionId,
+                                                         String regionalLanguage,
+                                                         NoticeLanguageText englishText) {
+        Optional<NoticeLanguageText> existing = noticeLanguageTextRepository
+            .findByTenantIdAndVersionIdAndLanguage(tenantId, versionId, regionalLanguage);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        String translated = translationClient.translate(englishText.getContent(), "en", regionalLanguage);
+        if (translated == null || translated.isBlank()) {
+            throw new ResponseStatusException(SERVICE_UNAVAILABLE, "Regional translation unavailable");
+        }
+
+        String translationEngine = translationClient.getEngine();
+        String translationEngineVersion = translationClient.getEngineVersion();
+
+        String contentHash = computeSHA256(translated);
+        NoticeLanguageText languageText = new NoticeLanguageText();
+        languageText.setTenantId(tenantId);
+        languageText.setVersionId(versionId);
+        languageText.setLanguage(regionalLanguage);
+        languageText.setContent(translated);
+        languageText.setContentHash(contentHash);
+        languageText.setTranslationSource("AUTO");
+        languageText.setTranslationEngine(translationEngine);
+        languageText.setTranslationEngineVersion(translationEngineVersion);
+        languageText.setTranslatedFromLanguage("en");
+        languageText.setTranslatedAt(Instant.now());
+
+        try {
+            languageText = noticeLanguageTextRepository.save(languageText);
+        } catch (DataIntegrityViolationException ex) {
+            Optional<NoticeLanguageText> deduped = noticeLanguageTextRepository
+                .findByTenantIdAndVersionIdAndLanguage(tenantId, versionId, regionalLanguage);
+            if (deduped.isPresent()) {
+                return deduped.get();
+            }
+            throw ex;
+        }
+
+        ObjectNode auditMetadata = objectMapper.createObjectNode();
+        auditMetadata.put("tenantId", tenantId.toString());
+        auditMetadata.put("noticeId", noticeId.toString());
+        auditMetadata.put("versionId", versionId.toString());
+        auditMetadata.put("language", regionalLanguage);
+        auditMetadata.put("languageTextId", languageText.getLanguageId().toString());
+        auditMetadata.put("contentHash", contentHash);
+        auditMetadata.put("translationSource", "AUTO");
+        if (translationEngine != null && !translationEngine.isBlank()) {
+            auditMetadata.put("translationEngine", translationEngine);
+        }
+        if (translationEngineVersion != null && !translationEngineVersion.isBlank()) {
+            auditMetadata.put("translationEngineVersion", translationEngineVersion);
+        }
+        auditMetadata.put("translatedAt", languageText.getTranslatedAt().toString());
+
+        String payloadHash = computeSHA256(languageText.getLanguageId().toString() + ":CONSENT_LANGUAGE_TRANSLATION_GENERATED");
+
+        AuditEvent auditEvent = AuditEvent.builder()
+            .tenantId(tenantId)
+            .actorId(TenantContextHolder.getUserId())
+            .actorType(AuditEvent.ActorType.USER)
+            .service(serviceName)
+            .action("CONSENT_LANGUAGE_TRANSLATION_GENERATED")
+            .entityType("notice_language")
+            .entityId(languageText.getLanguageId().toString())
+            .payloadHash(payloadHash)
+            .metadata(auditMetadata)
+            .build();
+        auditWriter.write(auditEvent);
+
+        EventEnvelopeV1 envelope = new EventEnvelopeV1();
+        envelope.setEventId(UUID.randomUUID());
+        envelope.setEventType("CONSENT_LANGUAGE_TRANSLATION_GENERATED");
+        envelope.setTenantId(tenantId);
+        envelope.setActorId(TenantContextHolder.getUserId());
+        envelope.setActorType(com.regulyn.events.model.ActorType.USER);
+        envelope.setSourceService(serviceName);
+        envelope.setEntityType("notice_language");
+        envelope.setEntityId(languageText.getLanguageId().toString());
+        envelope.setOccurredAt(Instant.now());
+        envelope.setPayload(auditMetadata);
+        envelope.setPayloadHash(payloadHash);
+        envelope.setCorrelationId(TenantContextHolder.getRequestId());
+        outboxWriter.write(envelope);
+
+        return languageText;
     }
     
     @Transactional

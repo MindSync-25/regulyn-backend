@@ -71,4 +71,66 @@ public class NotificationServiceClient {
             throw new RuntimeException("Notification service error: " + e.getMessage());
         }
     }
+
+    public NotificationSendResult sendEmail(UUID tenantId,
+                                            String to,
+                                            String subject,
+                                            String body,
+                                            UUID draftId,
+                                            UUID dispatchLogId) {
+        if (stubMode) {
+            logger.info("STUB: Sending email to {} for tenant {}", to, tenantId);
+            return new NotificationSendResult(
+                UUID.randomUUID().toString(),
+                UUID.randomUUID().toString(),
+                "SENT"
+            );
+        }
+
+        try {
+            String url = notificationServiceUrl + "/send";
+
+            Map<String, Object> request = Map.of(
+                "channel", "EMAIL",
+                "to", to,
+                "subject", subject,
+                "body", body,
+                "draftId", draftId != null ? draftId.toString() : null,
+                "dispatchLogId", dispatchLogId != null ? dispatchLogId.toString() : null
+            );
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-Tenant-ID", tenantId.toString());
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> bodyMap = response.getBody();
+                String requestId = asString(bodyMap.get("notificationRequestId"));
+                if (requestId == null) {
+                    requestId = asString(bodyMap.get("requestId"));
+                }
+                String providerMessageId = asString(bodyMap.get("providerMessageId"));
+                if (providerMessageId == null) {
+                    providerMessageId = asString(bodyMap.get("messageId"));
+                }
+                String status = asString(bodyMap.get("status"));
+
+                logger.info("Sent email to {}: {}", to, bodyMap);
+                return new NotificationSendResult(requestId, providerMessageId, status);
+            }
+
+            throw new RuntimeException("Failed to send email: " + response.getStatusCode());
+
+        } catch (RestClientException e) {
+            logger.error("Notification service error", e);
+            throw new RuntimeException("Notification service error: " + e.getMessage());
+        }
+    }
+
+    private String asString(Object value) {
+        return value != null ? value.toString() : null;
+    }
 }

@@ -166,6 +166,7 @@ public class ConsentWorkflowIntegrationTest {
             "analytics",
             "en",
             "WIDGET",
+            null,
             "client-ref-123",
             "idempotency-key-001"
         );
@@ -206,7 +207,7 @@ public class ConsentWorkflowIntegrationTest {
         
         UUID dataPrincipalId = UUID.randomUUID();
         GrantConsentRequest grantReq = new GrantConsentRequest(
-            dataPrincipalId, "newsletter", "en", "PORTAL", null, null);
+            dataPrincipalId, "newsletter", "en", "PORTAL", null, null, null);
         GrantConsentResponse grantResp = noticeManagementService.grantConsent(grantReq);
         
         // Withdraw consent
@@ -255,7 +256,7 @@ public class ConsentWorkflowIntegrationTest {
         // Grant multiple consents
         UUID dataPrincipalId = UUID.randomUUID();
         GrantConsentRequest grantReq1 = new GrantConsentRequest(
-            dataPrincipalId, "terms", "en", "WIDGET", null, "key-1");
+            dataPrincipalId, "terms", "en", "WIDGET", null, null, "key-1");
         noticeManagementService.grantConsent(grantReq1);
         
         // Create another notice
@@ -269,7 +270,7 @@ public class ConsentWorkflowIntegrationTest {
         noticeManagementService.publishVersion(notice2Resp.noticeId(), version2Resp.versionId());
         
         GrantConsentRequest grantReq2 = new GrantConsentRequest(
-            dataPrincipalId, "privacy", "en", "PORTAL", null, "key-2");
+            dataPrincipalId, "privacy", "en", "PORTAL", null, null, "key-2");
         noticeManagementService.grantConsent(grantReq2);
         
         // List all consents for data principal

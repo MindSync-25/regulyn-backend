@@ -7,5 +7,6 @@ public record GrantConsentResponse(
     String status,
     String receiptHash,
     UUID noticeVersionId,
-    String contentHash
+    String contentHash,
+    UUID purposeVersionId
 ) {}

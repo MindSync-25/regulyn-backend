@@ -18,6 +18,21 @@ spring:
 audit:
   schema: incident
 
+incident:
+  round2:
+    notices:
+      bridgeEnabled: true
+      makerCheckerEnabled: true
+  close:
+    requireEvidenceBundle: true
+  notifications:
+    authorityContacts: []
+    boardContacts: []
+    receiptWebhookSecret: ""
+  sla-escalation:
+    dpoEmails: []
+    adminEmails: []
+
 server:
   port: 8087
 

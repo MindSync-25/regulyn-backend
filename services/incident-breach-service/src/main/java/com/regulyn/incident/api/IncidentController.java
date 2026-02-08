@@ -68,6 +68,15 @@ public class IncidentController {
         SendNotificationResponse response = incidentService.sendNotification(incidentId, notificationId);
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/{incidentId}/notifications/{notificationId}/reject")
+    public ResponseEntity<ApproveNotificationResponse> rejectNotification(
+            @PathVariable("incidentId") UUID incidentId,
+            @PathVariable("notificationId") UUID notificationId,
+            @RequestBody ApproveNotificationRequest request) {
+        ApproveNotificationResponse response = incidentService.rejectNotification(incidentId, notificationId, request);
+        return ResponseEntity.ok(response);
+    }
     
     @PostMapping("/{incidentId}/close")
     public ResponseEntity<CloseIncidentResponse> closeIncident(

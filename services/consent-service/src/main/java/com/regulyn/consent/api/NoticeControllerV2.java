@@ -46,8 +46,9 @@ public class NoticeControllerV2 {
     @PostMapping("/notices/{noticeId}/versions/{versionId}/publish")
     public ResponseEntity<PublishVersionResponse> publishVersion(
             @PathVariable UUID noticeId,
-            @PathVariable UUID versionId) {
-        return ResponseEntity.ok(noticeManagementService.publishVersion(noticeId, versionId));
+            @PathVariable UUID versionId,
+            @RequestBody(required = false) PublishVersionRequest request) {
+        return ResponseEntity.ok(noticeManagementService.publishVersion(noticeId, versionId, request));
     }
     
     @GetMapping("/notices/active")
@@ -55,6 +56,13 @@ public class NoticeControllerV2 {
             @RequestParam String purpose,
             @RequestParam(defaultValue = "en") String language) {
         return ResponseEntity.ok(noticeManagementService.getActiveNotice(purpose, language));
+    }
+
+    @GetMapping("/notices/active-dual")
+    public ResponseEntity<ActiveDualNoticeResponse> getActiveNoticeDual(
+            @RequestParam String purpose,
+            @RequestParam String region) {
+        return ResponseEntity.ok(noticeManagementService.getActiveNoticeDual(purpose, region));
     }
     
     @PostMapping("/consents")

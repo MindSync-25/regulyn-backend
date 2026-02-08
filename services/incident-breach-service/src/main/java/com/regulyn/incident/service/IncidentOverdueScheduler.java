@@ -1,5 +1,7 @@
 package com.regulyn.incident.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.regulyn.common.audit.AuditEvent;
 import com.regulyn.common.audit.AuditWriter;
 import com.regulyn.events.factory.EventFactory;
@@ -27,14 +29,17 @@ public class IncidentOverdueScheduler {
     private final IncidentCaseRepository incidentRepository;
     private final AuditWriter auditWriter;
     private final OutboxWriter outboxWriter;
+    private final ObjectMapper objectMapper;
     
     public IncidentOverdueScheduler(
             IncidentCaseRepository incidentRepository,
             AuditWriter auditWriter,
-            OutboxWriter outboxWriter) {
+            OutboxWriter outboxWriter,
+            ObjectMapper objectMapper) {
         this.incidentRepository = incidentRepository;
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
+        this.objectMapper = objectMapper;
     }
     
     @Scheduled(fixedRate = 900000) // 15 minutes
@@ -53,10 +58,13 @@ public class IncidentOverdueScheduler {
         for (IncidentCase incident : overdueIncidents) {
             try {
                 incident.setNotifyOverdue(true);
+                recordBreachMetadata(incident, now);
                 incidentRepository.save(incident);
                 
                 writeAudit(incident.getTenantId(), incident.getId());
                 writeOutbox(incident.getTenantId(), incident.getId(), incident.getSeverity(), incident.getStatus());
+                writeBreachAudit(incident.getTenantId(), incident.getId());
+                writeBreachOutbox(incident.getTenantId(), incident.getId(), incident.getNotifyDueAt(), now);
                 
                 logger.warn("Marked incident {} as overdue (due: {}, status: {})",
                     incident.getId(), incident.getNotifyDueAt(), incident.getStatus());
@@ -64,6 +72,24 @@ public class IncidentOverdueScheduler {
             } catch (Exception e) {
                 logger.error("Failed to process overdue incident {}", incident.getId(), e);
             }
+        }
+    }
+
+    private void recordBreachMetadata(IncidentCase incident, Instant occurredAt) {
+        try {
+            Map<String, Object> metadata;
+            if (incident.getMetadata() != null && !incident.getMetadata().isBlank()) {
+                metadata = objectMapper.readValue(incident.getMetadata(), Map.class);
+            } else {
+                metadata = new java.util.HashMap<>();
+            }
+
+            metadata.putIfAbsent("slaBreachRecordedAt", occurredAt.toString());
+            metadata.putIfAbsent("slaBreachJustification", "");
+
+            incident.setMetadata(objectMapper.writeValueAsString(metadata));
+        } catch (JsonProcessingException ex) {
+            logger.warn("Failed to update breach metadata for incident {}", incident.getId());
         }
     }
     
@@ -105,6 +131,47 @@ public class IncidentOverdueScheduler {
             outboxWriter.write(event);
         } catch (Exception e) {
             logger.error("Failed to write outbox", e);
+        }
+    }
+
+    private void writeBreachAudit(java.util.UUID tenantId, java.util.UUID incidentId) {
+        try {
+            String hash = hashPayload(incidentId.toString());
+
+            AuditEvent event = AuditEvent.builder()
+                .tenantId(tenantId)
+                .actorId(null)
+                .actorType(AuditEvent.ActorType.SYSTEM)
+                .service("incident-breach-service")
+                .action("INCIDENT_SLA_BREACHED")
+                .entityType("IncidentCase")
+                .entityId(incidentId.toString())
+                .payloadHash(hash)
+                .build();
+
+            auditWriter.write(event);
+        } catch (Exception e) {
+            logger.error("Failed to write breach audit", e);
+        }
+    }
+
+    private void writeBreachOutbox(java.util.UUID tenantId, java.util.UUID incidentId, Instant slaDueAt, Instant occurredAt) {
+        try {
+            EventEnvelopeV1 event = EventFactory.create(
+                "INCIDENT_SLA_BREACHED",
+                "incident-breach-service",
+                "incident_case",
+                incidentId.toString(),
+                Map.of(
+                    "incidentId", incidentId.toString(),
+                    "tenantId", tenantId.toString(),
+                    "slaDueAt", slaDueAt != null ? slaDueAt.toString() : "",
+                    "occurredAt", occurredAt.toString()
+                )
+            );
+            outboxWriter.write(event);
+        } catch (Exception e) {
+            logger.error("Failed to write breach outbox", e);
         }
     }
     

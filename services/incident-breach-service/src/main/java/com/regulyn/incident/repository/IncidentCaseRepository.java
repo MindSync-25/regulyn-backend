@@ -28,4 +28,7 @@ public interface IncidentCaseRepository extends JpaRepository<IncidentCase, UUID
 
     @Query("SELECT i FROM IncidentCase i WHERE i.notifyDueAt < :now AND i.status != 'NOTIFIED' AND i.notifyOverdue = false")
     List<IncidentCase> findOverdueIncidents(@Param("now") Instant now);
+
+    @Query("SELECT i FROM IncidentCase i WHERE i.notifyDueAt IS NOT NULL AND i.status <> 'CLOSED'")
+    List<IncidentCase> findOpenIncidentsForEscalation();
 }

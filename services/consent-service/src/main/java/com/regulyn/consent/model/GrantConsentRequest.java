@@ -19,6 +19,8 @@ public record GrantConsentRequest(
     @NotBlank(message = "Source is required")
     @Pattern(regexp = "^(WIDGET|PORTAL)$", message = "Source must be WIDGET or PORTAL")
     String source,
+
+    String region,
     
     String clientRef,
     String idempotencyKey

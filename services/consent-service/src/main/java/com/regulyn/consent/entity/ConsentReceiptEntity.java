@@ -41,6 +41,39 @@ public class ConsentReceiptEntity {
     
     @Column(name = "content_hash", nullable = false)
     private String contentHash;
+
+    @Column(name = "purpose_version_id")
+    private UUID purposeVersionId;
+
+    @Column(name = "language_code", length = 12)
+    private String languageCode;
+
+    @Column(name = "notice_language_text_id")
+    private UUID noticeLanguageTextId;
+
+    @Column(name = "notice_content_hash_sha256", length = 64)
+    private String noticeContentHashSha256;
+
+    @Column(name = "region_code", length = 8)
+    private String regionCode;
+
+    @Column(name = "english_language_code", length = 12)
+    private String englishLanguageCode;
+
+    @Column(name = "english_notice_language_text_id")
+    private UUID englishNoticeLanguageTextId;
+
+    @Column(name = "english_content_hash_sha256", length = 64)
+    private String englishContentHashSha256;
+
+    @Column(name = "regional_notice_language_text_id")
+    private UUID regionalNoticeLanguageTextId;
+
+    @Column(name = "regional_content_hash_sha256", length = 64)
+    private String regionalContentHashSha256;
+
+    @Column(name = "evidence_artifact_id")
+    private UUID evidenceArtifactId;
     
     @Column(name = "receipt_hash", nullable = false)
     private String receiptHash;
@@ -160,6 +193,94 @@ public class ConsentReceiptEntity {
 
     public void setContentHash(String contentHash) {
         this.contentHash = contentHash;
+    }
+
+    public UUID getPurposeVersionId() {
+        return purposeVersionId;
+    }
+
+    public void setPurposeVersionId(UUID purposeVersionId) {
+        this.purposeVersionId = purposeVersionId;
+    }
+
+    public String getLanguageCode() {
+        return languageCode;
+    }
+
+    public void setLanguageCode(String languageCode) {
+        this.languageCode = languageCode;
+    }
+
+    public UUID getNoticeLanguageTextId() {
+        return noticeLanguageTextId;
+    }
+
+    public void setNoticeLanguageTextId(UUID noticeLanguageTextId) {
+        this.noticeLanguageTextId = noticeLanguageTextId;
+    }
+
+    public String getNoticeContentHashSha256() {
+        return noticeContentHashSha256;
+    }
+
+    public void setNoticeContentHashSha256(String noticeContentHashSha256) {
+        this.noticeContentHashSha256 = noticeContentHashSha256;
+    }
+
+    public String getRegionCode() {
+        return regionCode;
+    }
+
+    public void setRegionCode(String regionCode) {
+        this.regionCode = regionCode;
+    }
+
+    public String getEnglishLanguageCode() {
+        return englishLanguageCode;
+    }
+
+    public void setEnglishLanguageCode(String englishLanguageCode) {
+        this.englishLanguageCode = englishLanguageCode;
+    }
+
+    public UUID getEnglishNoticeLanguageTextId() {
+        return englishNoticeLanguageTextId;
+    }
+
+    public void setEnglishNoticeLanguageTextId(UUID englishNoticeLanguageTextId) {
+        this.englishNoticeLanguageTextId = englishNoticeLanguageTextId;
+    }
+
+    public String getEnglishContentHashSha256() {
+        return englishContentHashSha256;
+    }
+
+    public void setEnglishContentHashSha256(String englishContentHashSha256) {
+        this.englishContentHashSha256 = englishContentHashSha256;
+    }
+
+    public UUID getRegionalNoticeLanguageTextId() {
+        return regionalNoticeLanguageTextId;
+    }
+
+    public void setRegionalNoticeLanguageTextId(UUID regionalNoticeLanguageTextId) {
+        this.regionalNoticeLanguageTextId = regionalNoticeLanguageTextId;
+    }
+
+    public String getRegionalContentHashSha256() {
+        return regionalContentHashSha256;
+    }
+
+    public void setRegionalContentHashSha256(String regionalContentHashSha256) {
+        this.regionalContentHashSha256 = regionalContentHashSha256;
+    }
+
+    public UUID getEvidenceArtifactId() {
+        return evidenceArtifactId;
+    }
+
+    public void setEvidenceArtifactId(UUID evidenceArtifactId) {
+        this.evidenceArtifactId = evidenceArtifactId;
     }
 
     public String getReceiptHash() {

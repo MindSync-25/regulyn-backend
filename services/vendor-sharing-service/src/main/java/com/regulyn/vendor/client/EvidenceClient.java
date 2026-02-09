@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -79,6 +80,46 @@ public class EvidenceClient {
             return UUID.fromString(body.get("evidenceExportId").toString());
         }
         throw new RuntimeException("Failed to create export: no evidenceExportId in response");
+    }
+
+    /**
+     * Store an evidence artifact
+     * POST /evidence/artifacts
+     */
+    public EvidenceArtifactResponse createArtifact(
+        UUID tenantId,
+        String type,
+        String filename,
+        String contentType,
+        String sha256,
+        byte[] bytes
+    ) throws RestClientException {
+        String url = evidenceServiceUrl + "/evidence/artifacts";
+
+        Map<String, Object> payload = Map.of(
+            "tenantId", tenantId.toString(),
+            "type", type,
+            "filename", filename,
+            "contentType", contentType,
+            "sha256", sha256,
+            "bytes", Base64.getEncoder().encodeToString(bytes)
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
+
+        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+        Map<String, Object> body = response.getBody();
+        if (body != null && body.containsKey("artifactRef")) {
+            String artifactRef = body.get("artifactRef").toString();
+            String returnedHash = body.containsKey("sha256") ? body.get("sha256").toString() : sha256;
+            return new EvidenceArtifactResponse(artifactRef, returnedHash);
+        }
+        throw new RuntimeException("Failed to store evidence artifact: no artifactRef in response");
+    }
+
+    public record EvidenceArtifactResponse(String artifactRef, String sha256) {
     }
 
     /**

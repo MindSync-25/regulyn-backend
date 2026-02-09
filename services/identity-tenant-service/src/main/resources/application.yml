@@ -24,3 +24,15 @@ jwt:
 # OpenTelemetry Configuration
 otel:
   enabled: ${OTEL_ENABLED:false}
+
+audit:
+  schema: identity
+
+invite:
+  token:
+    secret: ${INVITE_TOKEN_SECRET:change-me-in-production}
+    encryption-key: ${INVITE_TOKEN_ENCRYPTION_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+
+api:
+  key:
+    hmac-secret: ${API_KEY_HMAC_SECRET:change-me-in-production}

@@ -1,0 +1,11 @@
+package io.regulyn.scanner.website;
+
+public enum WebsiteFindingKind {
+    COOKIE_PRESENT,
+    FORM_PII_DETECTED,
+    TRACKER_DETECTED,
+    INSECURE_FORM_ACTION_HTTP,
+    UNKNOWN_THIRD_PARTY_ENDPOINT,
+    MISSING_COOKIE_NOTICE_LINK,
+    TRACKER_WITHOUT_CONSENT_GATING
+}

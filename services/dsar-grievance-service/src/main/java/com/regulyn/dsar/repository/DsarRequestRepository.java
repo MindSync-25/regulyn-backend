@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,6 +21,12 @@ public interface DsarRequestRepository extends JpaRepository<DsarRequestEntity, 
     Optional<DsarRequestEntity> findByRequestIdAndTenantId(String requestId, UUID tenantId);
     
     Optional<DsarRequestEntity> findByRequestIdPkAndTenantId(UUID requestIdPk, UUID tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM DsarRequestEntity d WHERE d.requestIdPk = :dsarId AND d.tenantId = :tenantId")
+    Optional<DsarRequestEntity> findByRequestIdPkAndTenantIdForUpdate(
+        @Param("dsarId") UUID dsarId,
+        @Param("tenantId") UUID tenantId);
     
     Optional<DsarRequestEntity> findByTenantIdAndDataPrincipalIdAndIdempotencyKey(
         UUID tenantId, UUID dataPrincipalId, String idempotencyKey);
@@ -33,4 +41,7 @@ public interface DsarRequestRepository extends JpaRepository<DsarRequestEntity, 
     
     @Query("SELECT d FROM DsarRequestEntity d WHERE d.dueAt < :now AND d.closedAt IS NULL AND d.slaBreached = false")
     List<DsarRequestEntity> findOverdueDsarRequests(@Param("now") Instant now);
+
+    @Query("SELECT d FROM DsarRequestEntity d WHERE d.createdAt <= :cutoff AND d.status <> 'CLOSED'")
+    List<DsarRequestEntity> findEscalationCandidates(@Param("cutoff") Instant cutoff);
 }

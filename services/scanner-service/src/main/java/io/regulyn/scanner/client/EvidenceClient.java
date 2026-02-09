@@ -29,6 +29,10 @@ public class EvidenceClient {
     }
 
     public UUID createEvidence(String type, Object payload) {
+        return createEvidence(type, payload, Map.of());
+    }
+
+    public UUID createEvidence(String type, Object payload, Map<String, String> extraHeaders) {
         String url = baseUrl + "/evidence";
 
         Map<String, Object> request = Map.of(
@@ -36,7 +40,7 @@ public class EvidenceClient {
             "payload", payload
         );
 
-        HttpHeaders headers = new HttpHeaders();
+        HttpHeaders headers = buildHeaders(extraHeaders);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         try {
@@ -61,6 +65,10 @@ public class EvidenceClient {
     }
 
     public UUID createBundle(String bundleType, UUID evidenceId) {
+        return createBundle(bundleType, evidenceId, Map.of());
+    }
+
+    public UUID createBundle(String bundleType, UUID evidenceId, Map<String, String> extraHeaders) {
         String url = baseUrl + "/evidence/bundles";
 
         Map<String, Object> request = Map.of(
@@ -68,7 +76,7 @@ public class EvidenceClient {
             "evidenceIds", new UUID[]{evidenceId}
         );
 
-        HttpHeaders headers = new HttpHeaders();
+        HttpHeaders headers = buildHeaders(extraHeaders);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         try {
@@ -136,5 +144,17 @@ public class EvidenceClient {
             log.error("Failed to download export: {}", e.getMessage());
             throw new RuntimeException("Failed to download export", e);
         }
+    }
+
+    private HttpHeaders buildHeaders(Map<String, String> extraHeaders) {
+        HttpHeaders headers = new HttpHeaders();
+        if (extraHeaders != null) {
+            extraHeaders.forEach((key, value) -> {
+                if (key != null && value != null) {
+                    headers.set(key, value);
+                }
+            });
+        }
+        return headers;
     }
 }

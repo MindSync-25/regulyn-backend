@@ -25,34 +25,35 @@ public class DsarController {
   
   @PostMapping("/{dsarId}/assign")
   public AssignDsarResponse assignDsar(
-      @PathVariable UUID dsarId,
+      @PathVariable("dsarId") UUID dsarId,
       @Valid @RequestBody AssignDsarRequest request) {
     return dsarWorkflowService.assignDsar(dsarId, request);
   }
   
   @PostMapping("/{dsarId}/transition")
   public TransitionDsarResponse transitionStatus(
-      @PathVariable UUID dsarId,
+      @PathVariable("dsarId") UUID dsarId,
       @Valid @RequestBody TransitionDsarRequest request) {
     return dsarWorkflowService.transitionStatus(dsarId, request);
   }
   
   @PostMapping("/{dsarId}/approve")
   public ApproveDsarResponse approveDsar(
-      @PathVariable UUID dsarId,
+      @PathVariable("dsarId") UUID dsarId,
       @Valid @RequestBody ApproveDsarRequest request) {
     return dsarWorkflowService.approveDsar(dsarId, request);
   }
   
   @PostMapping("/{dsarId}/close")
   public CloseDsarResponse closeDsar(
-      @PathVariable UUID dsarId,
-      @RequestBody CloseDsarRequest request) {
-    return dsarWorkflowService.closeDsar(dsarId, request);
+      @PathVariable("dsarId") UUID dsarId,
+      @RequestBody CloseDsarRequest request,
+      @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+    return dsarWorkflowService.closeDsar(dsarId, request, idempotencyKey);
   }
   
   @GetMapping("/{dsarId}")
-  public DsarDetailResponse getDsar(@PathVariable UUID dsarId) {
+  public DsarDetailResponse getDsar(@PathVariable("dsarId") UUID dsarId) {
     return dsarWorkflowService.getDsar(dsarId);
   }
   

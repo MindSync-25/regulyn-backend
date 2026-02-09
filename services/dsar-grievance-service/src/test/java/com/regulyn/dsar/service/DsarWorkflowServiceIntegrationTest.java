@@ -261,6 +261,11 @@ class DsarWorkflowServiceIntegrationTest {
         
         // Mock evidence service response
         UUID mockBundleId = UUID.randomUUID();
+        stubFor(post(urlEqualTo("/evidence"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"evidenceId\":\"11111111-1111-1111-1111-111111111115\",\"status\":\"STORED\"}")));
         stubFor(post(urlEqualTo("/bundles"))
             .willReturn(aResponse()
                 .withStatus(200)

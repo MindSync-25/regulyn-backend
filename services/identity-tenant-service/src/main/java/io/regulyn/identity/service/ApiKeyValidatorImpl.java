@@ -27,6 +27,15 @@ public class ApiKeyValidatorImpl implements ApiKeyValidator {
             return ApiKeyValidationResult.invalid();
         }
 
+        String hashAlg = apiKey.getHashAlg();
+        if (hashAlg != null && !hashAlg.isBlank() && !"SHA256".equalsIgnoreCase(hashAlg)) {
+            return ApiKeyValidationResult.invalid();
+        }
+
+        if (apiKey.getRevokedAt() != null) {
+            return ApiKeyValidationResult.invalid();
+        }
+
         // Check expiration
         if (apiKey.getExpiresAt() != null && apiKey.getExpiresAt().isBefore(Instant.now())) {
             return ApiKeyValidationResult.invalid();

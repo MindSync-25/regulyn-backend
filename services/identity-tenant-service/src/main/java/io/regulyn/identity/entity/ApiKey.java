@@ -38,6 +38,21 @@ public class ApiKey {
     @Column(name = "last_used_at")
     private Instant lastUsedAt;
 
+    @Column(name = "key_version", nullable = false)
+    private Integer keyVersion = 1;
+
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
+    @Column(name = "rotated_from_api_key_id")
+    private UUID rotatedFromApiKeyId;
+
+    @Column(name = "prefix", length = 16)
+    private String prefix;
+
+    @Column(name = "hash_alg", nullable = false, length = 50)
+    private String hashAlg = "SHA256";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -107,6 +122,46 @@ public class ApiKey {
 
     public void setLastUsedAt(Instant lastUsedAt) {
         this.lastUsedAt = lastUsedAt;
+    }
+
+    public Integer getKeyVersion() {
+        return keyVersion;
+    }
+
+    public void setKeyVersion(Integer keyVersion) {
+        this.keyVersion = keyVersion;
+    }
+
+    public Instant getRevokedAt() {
+        return revokedAt;
+    }
+
+    public void setRevokedAt(Instant revokedAt) {
+        this.revokedAt = revokedAt;
+    }
+
+    public UUID getRotatedFromApiKeyId() {
+        return rotatedFromApiKeyId;
+    }
+
+    public void setRotatedFromApiKeyId(UUID rotatedFromApiKeyId) {
+        this.rotatedFromApiKeyId = rotatedFromApiKeyId;
+    }
+
+    public String getPrefix() {
+        return prefix;
+    }
+
+    public void setPrefix(String prefix) {
+        this.prefix = prefix;
+    }
+
+    public String getHashAlg() {
+        return hashAlg;
+    }
+
+    public void setHashAlg(String hashAlg) {
+        this.hashAlg = hashAlg;
     }
 
     public Instant getCreatedAt() {

@@ -6,9 +6,6 @@ import io.regulyn.identity.repository.ApiKeyRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.List;
 
@@ -20,9 +17,11 @@ import java.util.List;
 public class InternalApiKeyService {
 
     private final ApiKeyRepository apiKeyRepository;
+    private final ApiKeyTokenService apiKeyTokenService;
 
-    public InternalApiKeyService(ApiKeyRepository apiKeyRepository) {
+    public InternalApiKeyService(ApiKeyRepository apiKeyRepository, ApiKeyTokenService apiKeyTokenService) {
         this.apiKeyRepository = apiKeyRepository;
+        this.apiKeyTokenService = apiKeyTokenService;
     }
 
     @Transactional
@@ -31,14 +30,26 @@ public class InternalApiKeyService {
             return ValidateApiKeyResponse.invalid();
         }
 
-        // Hash the raw API key using SHA-256
-        String apiKeyHash = hashApiKey(rawApiKey);
+        String apiKeyHash = apiKeyTokenService.hashHmac(rawApiKey);
 
-        // Look up by hash
-        ApiKey apiKey = apiKeyRepository.findByApiKeyHashAndEnabled(apiKeyHash, true)
-                .orElse(null);
+        ApiKey apiKey = apiKeyRepository.findByApiKeyHash(apiKeyHash)
+            .filter(candidate -> isExpectedHashAlg(candidate, "HMAC_SHA256"))
+            .orElseGet(() -> {
+                String legacyHash = apiKeyTokenService.hashSha256(rawApiKey);
+                return apiKeyRepository.findByApiKeyHash(legacyHash)
+                    .filter(candidate -> isExpectedHashAlg(candidate, "SHA256"))
+                    .orElse(null);
+            });
 
         if (apiKey == null) {
+            return ValidateApiKeyResponse.invalid();
+        }
+
+        if (!Boolean.TRUE.equals(apiKey.getEnabled())) {
+            return ValidateApiKeyResponse.invalid();
+        }
+
+        if (apiKey.getRevokedAt() != null) {
             return ValidateApiKeyResponse.invalid();
         }
 
@@ -59,19 +70,12 @@ public class InternalApiKeyService {
         );
     }
 
-    private String hashApiKey(String rawApiKey) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(rawApiKey.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
-                hexString.append(hex);
-            }
-            return hexString.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
+    private boolean isExpectedHashAlg(ApiKey apiKey, String expected) {
+        String alg = apiKey.getHashAlg();
+        if (alg == null || alg.isBlank()) {
+            return "SHA256".equals(expected);
         }
+        return alg.equalsIgnoreCase(expected);
     }
+
 }

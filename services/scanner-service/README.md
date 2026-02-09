@@ -1,11 +1,11 @@
 # Scanner Service
 
 ## Overview
-Scanner Service is a data discovery and inventory service that automatically scans various data sources to identify entities, fields, and retention candidates. It provides pluggable scan adapters, integrates with retention-deletion-service for candidate promotion, and supports evidence-backed exports.
+Scanner Service is a data discovery and inventory service that automatically scans data sources to identify entities, fields, and retention candidates. It provides pluggable scan adapters, integrates with retention-deletion-service for candidate promotion, and supports evidence-backed exports.
 
 ## Purpose
 - **Automated Data Discovery**: Scan data sources (databases, APIs) to discover entities and fields
-- **Risk Assessment**: Classify discovered data by risk level (LOW, MEDIUM, HIGH)
+- **Risk Assessment**: Classify discovered data by risk level (LOW, MED, HIGH)
 - **Retention Candidate Identification**: Identify data eligible for retention/deletion policies
 - **Promotion to Retention Service**: Push retention candidates to retention-deletion-service
 - **Evidence-Backed Exports**: Create audit exports with evidence service integration
@@ -13,13 +13,24 @@ Scanner Service is a data discovery and inventory service that automatically sca
 
 ## Key Features
 - ✅ **Pluggable Scan Adapters**: MOCK (deterministic testing), HTTP_DISCOVERY (REST-based scanning)
-- ✅ **Scan Source Management**: Register, list, disable data sources
-- ✅ **Scan Execution**: INVENTORY (entities/fields), RETENTION_CANDIDATES, or BOTH modes
-- ✅ **Finding Persistence**: Store discovered entities/fields with metadata
+- ✅ **Website Scanner**: WEBSITE adapter with crawl summaries, fingerprints, and PARTIAL runs
+- ✅ **Scan Source Management**: Register, list, disable data sources (requires `systemId`)
+- ✅ **Scan Execution**: INVENTORY, RETENTION_CANDIDATES, or BOTH modes with `since` filter
+- ✅ **Finding Persistence**: Store discovered entities/fields/candidates with metadata
 - ✅ **Result Hashing**: SHA-256 hash for change detection across runs
-- ✅ **Retention Promotion**: Idempotent promotion with configurable risk thresholds
+- ✅ **Retention Promotion**: Idempotent promotion per run (scan_promotions)
 - ✅ **Scan Exports**: Time-range exports with evidence integration
-- ✅ **Event Emission**: All lifecycle events via OutboxWriter (scanner.source_created, scanner.run_succeeded, etc.)
+- ✅ **Remediation Tasks**: Generate tasks from findings with lifecycle transitions
+- ✅ **Evidence Artifacts + Bundles**: Task close/waive proof + run evidence bundles
+- ✅ **Event Emission**: Outbox events for lifecycle actions (scanner.*)
+
+## Round 2 Documentation
+Detailed design and behavior notes:
+- docs/scanner/ROUND2_PART1_persistence.md
+- docs/scanner/ROUND2_PART2_website_scanner.md
+- docs/scanner/ROUND2_PART3_tasks.md
+- docs/scanner/ROUND2_PART4_evidence.md
+- docs/scanner/ROUND2_FINAL_CHECKLIST.md
 
 ## Architecture
 
@@ -32,78 +43,103 @@ Scanner service uses pluggable adapters to support different data source types:
 - **Behavior**:
   - Inventory: 4 findings (2 entities: customer_profile/orders, 2 fields: email-PII/payment_method-FINANCIAL)
   - Retention Candidates: 5 findings with fixed UUIDs (00000000-0000-0000-0000-000000000001 through 000000000005)
-  - Risk Levels: HIGH, MEDIUM, MEDIUM, LOW, MEDIUM (stable across runs)
+  - Risk Levels (retention): HIGH, MED, MED, LOW, MED
+  - Confidence scores are deterministic (see adapter for exact values)
 
 #### HTTP_DISCOVERY Adapter
 - **Purpose**: REST-based data source scanning
 - **Use Case**: Production scanning of services with discovery endpoints
 - **Behavior**:
-  - Calls GET {baseUrl}/discover?since=<lastRunTimestamp>
-  - Supports authentication: API_KEY (X-API-Key header), BEARER (Authorization: Bearer token)
-  - Parses JSON response with entities/fields/retentionCandidates arrays
+  - Calls GET `{baseUrl}/discover?since=<lastRunTimestamp>` when `since` is provided
+  - Supports authentication: API_KEY (`X-API-Key` header), BEARER (`Authorization: Bearer token`)
+  - Parses JSON response with `entities`, `fields`, `retentionCandidates`
   - Throws exception on HTTP errors
 
 ### Scan Execution Flow
 1. **Create Scan Source** → POST /scanner/sources (ACTIVE status, specify adapter type)
-2. **Create Scan Run** → POST /scanner/runs (QUEUED status, select scan mode)
+2. **Create Scan Run** → POST /scanner/runs (QUEUED status, select scan mode, optional `since` and `requestRef`)
 3. **Execute Run** → POST /scanner/runs/{id}/execute
    - Updates status to RUNNING
-   - Selects adapter based on source_type
+   - Selects adapter based on `source_type`
    - Executes inventory and/or retention candidates scan
-   - Persists findings to scan_findings table
-   - Computes SHA-256 result_hash (canonical representation: findingType:entityType:riskLevel sorted)
+   - Persists findings to `scan_findings`
+   - Computes SHA-256 `result_hash` (canonical representation: `findingType:entityType:riskLevel` sorted and joined by `|`)
    - Updates status to SUCCEEDED/FAILED
-   - Emits events: scanner.run_started, scanner.findings_created, scanner.run_succeeded/failed
+   - Emits events: `scanner.run_started`, `scanner.findings_created`, `scanner.run_succeeded`/`scanner.run_failed`
 4. **Get Findings** → GET /scanner/runs/{id}/findings
 5. **Promote to Retention** → POST /scanner/runs/{id}/promote/retention-candidates
-   - Filters by minRiskLevel (LOW includes all, MED includes MED+HIGH, HIGH only HIGH)
+   - Filters by `minRiskLevel` (LOW → LOW+MED+HIGH, MED → MED+HIGH, HIGH → HIGH)
+   - Requires `subjectType` and optional `entityType`
    - Calls retention-deletion-service POST /retention/candidates for each subject
    - Tracks promoted_count/failed_count
-   - Prevents double-promotion with idempotency check (existsByTenantIdAndRunId)
+   - Prevents double-promotion per run using `scan_promotions`
 6. **Export Scans** → POST /scanner/exports/scans (creates evidence-backed export)
-   - Fetches all runs in time range
+   - Fetches runs and filters by `periodFrom`/`periodTo`
    - Calls evidence-service workflow: createEvidence → createBundle → createExport
    - Returns export with download link
 7. **Download Export** → GET /scanner/exports/{id}/download
 
-### Database Schema (V4__scanner_domain.sql)
+## Database Schema (Flyway)
+
+### V1__init.sql
+- **scanner schema**: created if missing
+- **audit_events** (public schema): shared audit table used by `AuditWriter`
+- **service_meta**: service metadata entry
+
+### V2__create_outbox_table.sql
+- **outbox_events** (public schema): outbox pattern table used by `OutboxWriter`
+
+### V4__scanner_domain.sql
 
 #### scan_sources
 - **Purpose**: Register data sources to scan
-- **Columns**: id, tenant_id, source_name (unique per tenant), source_type (MOCK/HTTP_DISCOVERY), status (ACTIVE/DISABLED), connection_string, auth_type (NONE/API_KEY/BEARER), auth_ref, metadata (JSONB), created_at, updated_at
+- **Columns**: source_id, tenant_id, source_name (unique per tenant), system_id, source_type (MOCK/HTTP_DISCOVERY), status (ACTIVE/DISABLED), base_url, auth_type (NONE/API_KEY/BEARER), auth_ref, metadata (JSONB), created_at, updated_at
 - **Indexes**: (tenant_id, status), (tenant_id, source_type)
 
 #### scan_runs
 - **Purpose**: Track scan execution
-- **Columns**: id, tenant_id, source_id, scan_mode (INVENTORY/RETENTION_CANDIDATES/BOTH), status (QUEUED/RUNNING/SUCCEEDED/FAILED), finding_count, result_hash (SHA-256), error_message, queued_at, started_at, completed_at
-- **Indexes**: (tenant_id, source_id, queued_at), (tenant_id, status)
+- **Columns**: run_id, tenant_id, source_id, scan_mode (INVENTORY/RETENTION_CANDIDATES/BOTH), status (QUEUED/RUNNING/SUCCEEDED/FAILED), since_at, request_ref, queued_at, started_at, finished_at, findings_count, result_hash, error_message
+- **Indexes**: (tenant_id, status, queued_at), (tenant_id, source_id, queued_at)
 
 #### scan_findings
 - **Purpose**: Store discovered entities/fields/candidates
-- **Columns**: id, tenant_id, run_id, finding_type (ENTITY/FIELD/RETENTION_CANDIDATE), entity_type, field_name, subject_id, subject_type (USER/TRANSACTION/etc), risk_level (LOW/MEDIUM/HIGH), description, metadata (JSONB), created_at
-- **Indexes**: (tenant_id, run_id), (tenant_id, finding_type, risk_level)
+- **Columns**: finding_id, tenant_id, run_id, finding_type (ENTITY/FIELD/RETENTION_CANDIDATE), entity_type, subject_id, field_name, data_category, risk_level (LOW/MED/HIGH), confidence, details (JSONB), created_at
+- **Indexes**: (tenant_id, run_id), (tenant_id, entity_type), (tenant_id, subject_id)
 
 #### scan_promotions
 - **Purpose**: Track retention candidate promotions
-- **Columns**: id, tenant_id, run_id (unique per tenant for idempotency), promoted_count, failed_count, promoted_at
-- **Indexes**: (tenant_id, run_id)
+- **Columns**: promotion_id, tenant_id, run_id, promoted_at, promoted_count, failed_count, details (JSONB)
+- **Indexes**: (tenant_id, run_id, promoted_at)
 
 #### scanner_exports
 - **Purpose**: Track scan exports
-- **Columns**: id, tenant_id, evidence_export_id, start_time, end_time, export_format, run_count, created_at
+- **Columns**: export_id, tenant_id, bundle_id, evidence_export_id, created_at
 - **Indexes**: (tenant_id, created_at)
 
-### Event Types
+## Event Types (Outbox + Audit actions)
 - **scanner.source_created**: New scan source registered
+- **scanner.source_disabled**: Scan source disabled
 - **scanner.run_created**: Scan run created (QUEUED)
 - **scanner.run_started**: Scan run execution started (RUNNING)
 - **scanner.run_succeeded**: Scan run completed successfully
+- **scanner.run_partial**: Scan run completed partially
 - **scanner.run_failed**: Scan run failed with error
 - **scanner.findings_created**: Findings persisted to database
+- **scanner.finding_detected**: Findings detected (summary)
 - **scanner.retention_promoted**: Retention candidates promoted to retention-deletion-service
 - **scanner.export_created**: Scan export created
+- **scanner.task_created_from_finding**: Tasks generated from findings
+- **scanner.task_status_changed**: Task status transition
+- **scanner.task_event_added**: Task note/attachment event added
+- **scanner.task_evidence_artifact_stored**: Task close/waive evidence stored
+- **scanner.scan_evidence_bundle_created**: Run evidence bundle created
 
 ## API Endpoints
+
+### Health Check
+
+#### GET /health-check
+Returns basic service status.
 
 ### Scan Sources
 
@@ -114,11 +150,13 @@ Create new scan source
   ```json
   {
     "sourceName": "Production Database",
+    "systemId": "uuid",
     "sourceType": "HTTP_DISCOVERY",
     "status": "ACTIVE",
-    "connectionString": "https://api.example.com",
+    "baseUrl": "https://api.example.com",
     "authType": "API_KEY",
-    "authRef": "PROD_API_KEY_ENV"
+    "authRef": "PROD_API_KEY_ENV",
+    "metadata": {"region": "us-east-1"}
   }
   ```
 - **Response**: ScanSourceResponse (201 Created)
@@ -134,7 +172,7 @@ List scan sources with optional filters
 Disable scan source (prevents new runs)
 - **Headers**: X-Tenant-ID
 - **Response**: ScanSourceResponse (200 OK)
-- **Error**: Cannot disable source with running scans
+- **Security**: @PreAuthorize("hasRole('ADMIN')")
 
 ### Scan Runs
 
@@ -145,23 +183,19 @@ Create new scan run
   ```json
   {
     "sourceId": "uuid",
-    "scanMode": "BOTH"
+    "scanMode": "BOTH",
+    "since": "2024-01-01T00:00:00Z",
+    "requestRef": "external-request-id"
   }
   ```
 - **Response**: ScanRunResponse (201 Created)
 - **Validation**: Source must be ACTIVE
-- **Error**: 409 Conflict if source is DISABLED
 
 #### POST /scanner/runs/{id}/execute
 Execute queued scan run
 - **Headers**: X-Tenant-ID
 - **Response**: ScanRunResponse (200 OK)
 - **Error**: 409 Conflict if run is not QUEUED
-- **Side Effects**:
-  - Updates status to RUNNING → SUCCEEDED/FAILED
-  - Persists findings to scan_findings
-  - Computes result_hash (SHA-256)
-  - Emits events
 
 #### GET /scanner/runs
 List scan runs with pagination
@@ -189,23 +223,21 @@ Promote retention candidates to retention-deletion-service
 - **Body**: PromoteRetentionCandidatesRequest
   ```json
   {
-    "minRiskLevel": "MEDIUM",
+    "minRiskLevel": "MED",
+    "subjectType": "CUSTOMER",
+    "entityType": "customer_profile",
     "limit": 100
   }
   ```
 - **Response**: PromoteRetentionCandidatesResponse (200 OK)
   ```json
   {
+    "runId": "uuid",
     "promotedCount": 42,
     "failedCount": 3
   }
   ```
 - **Error**: 409 Conflict if run already promoted (idempotency check)
-- **Behavior**:
-  - Filters findings by finding_type=RETENTION_CANDIDATE and risk_level >= minRiskLevel
-  - Calls retention-deletion-service POST /retention/candidates for each subject
-  - Continues on individual failures (non-blocking)
-  - Prevents duplicate subjects in same promotion
 
 ### Exports
 
@@ -215,12 +247,19 @@ Create scan export with evidence integration
 - **Body**: CreateScanExportRequest
   ```json
   {
-    "startTime": "2024-01-01T00:00:00Z",
-    "endTime": "2024-01-31T23:59:59Z",
-    "exportFormat": "JSON"
+    "periodFrom": "2024-01-01T00:00:00Z",
+    "periodTo": "2024-01-31T23:59:59Z",
+    "filters": {"sourceType": "HTTP_DISCOVERY"}
   }
   ```
 - **Response**: ScanExportResponse (201 Created)
+  ```json
+  {
+    "bundleId": "uuid",
+    "exportId": "uuid",
+    "downloadPath": "/scanner/exports/{exportId}/download"
+  }
+  ```
 - **Evidence Workflow**:
   1. createEvidence(type="SCAN_REPORT_SNAPSHOT")
   2. createBundle(type="AUDIT_EXPORT")
@@ -230,6 +269,35 @@ Create scan export with evidence integration
 Download scan export (proxies to evidence-service)
 - **Headers**: X-Tenant-ID
 - **Response**: application/octet-stream (200 OK)
+
+### Remediation Tasks
+
+#### POST /scanner/runs/{id}/tasks/generate
+Generate tasks from run findings
+- **Headers**: X-Tenant-ID
+
+#### GET /scanner/tasks
+List tasks
+- **Headers**: X-Tenant-ID
+- **Query Params**: status, sourceId, runId, severity, page, size
+
+#### GET /scanner/tasks/{id}
+Get task by ID
+- **Headers**: X-Tenant-ID
+
+#### POST /scanner/tasks/{id}/transition
+Transition task status (OPEN → IN_PROGRESS/CLOSED/WAIVED)
+- **Headers**: X-Tenant-ID, X-User-ID
+
+#### POST /scanner/tasks/{id}/events
+Add task note/attachment event
+- **Headers**: X-Tenant-ID, X-User-ID
+
+### Evidence Bundle
+
+#### POST /scanner/runs/{id}/evidence/bundle
+Create run evidence bundle (idempotent)
+- **Headers**: X-Tenant-ID, X-User-ID
 
 ## Configuration
 
@@ -250,6 +318,22 @@ server:
   port: 8094
 ```
 
+### application-local.yml
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/regulyn
+    username: regulyn
+    password: regulyn_dev_password
+  jpa:
+    properties:
+      hibernate:
+        default_schema: scanner
+  flyway:
+    schemas: scanner
+    locations: classpath:db/migration
+```
+
 ### Service Dependencies
 - **retention-deletion-service**: http://localhost:8086 (POST /retention/candidates)
 - **evidence-reporting-service**: http://localhost:8083 (evidence workflow)
@@ -257,17 +341,25 @@ server:
 ## Testing
 
 ### Integration Tests
-Scanner service includes 9 comprehensive integration tests with Testcontainers PostgreSQL and WireMock:
+Scanner service includes baseline and Round-2 integration tests (Testcontainers PostgreSQL + WireMock):
 
+**Round-1 baseline (ScannerServiceIntegrationTest)**
 1. **testCreateSourceAndList**: Create ACTIVE source, verify in list
-2. **testDisableSourcePreventsNewRuns**: Disable source, verify 409 Conflict on new run creation
+2. **testDisableSourcePreventsNewRuns**: Disable source, verify new run creation fails
 3. **testExecuteRunWithMockAdapter**: Execute MOCK adapter, verify 9 findings (4 inventory + 5 retention candidates)
 4. **testExecuteRunIdempotency**: Execute run twice, verify 409 Conflict on second execution
 5. **testHttpDiscoveryAdapterWithWireMock**: WireMock stub GET /discover, verify findings from HTTP response
 6. **testPromoteRetentionCandidates**: WireMock stub retention service, verify promotedCount/failedCount
 7. **testPromotionNoDoublePromotion**: Promote run, try again, verify 409 Conflict
 8. **testExportScansWithWireMock**: WireMock stubs for evidence workflow, verify export creation and download
-9. **testOutboxEventsCreated**: Verify full flow executes successfully (events mocked)
+9. **testFullWorkflowSucceeds**: Full happy path without assertions on outbox content
+
+**Round-2**
+- **ScannerRound2PersistenceSchemaIT**: Schema + partial unique index checks
+- **WebsiteScannerIT**: WEBSITE crawler persistence + PARTIAL handling
+- **RemediationTasksIT**: Task generation + transitions + audit/outbox
+- **TaskEvidenceIT**: Task close evidence artifact + idempotency
+- **RunEvidenceBundleIT**: Run evidence bundle creation + idempotency
 
 ### Run Tests
 ```bash
@@ -301,8 +393,8 @@ mvn clean install
 ### Adding New Scan Adapters
 1. Implement `ScanAdapter` interface
 2. Annotate with `@Component("YOUR_ADAPTER_NAME")`
-3. Add `YOUR_ADAPTER_NAME` to `SourceType` enum
-4. Adapter will be auto-discovered by `ScanRunService` via Map injection
+3. Add `YOUR_ADAPTER_NAME` to `CreateScanSourceRequest.SourceType` enum
+4. Adapter is auto-discovered by `ScanRunService` via Map injection
 
 ### Idempotency Guarantees
 - **Scan Execution**: Cannot execute same run twice (status must be QUEUED)
@@ -311,9 +403,7 @@ mvn clean install
 ### Result Hash Computation
 SHA-256 hash of canonical representation for change detection:
 ```
-findingType1:entityType1:riskLevel1
-findingType2:entityType2:riskLevel2
-...
+findingType1:entityType1:riskLevel1|findingType2:entityType2:riskLevel2|...
 ```
 (sorted alphabetically for consistency)
 

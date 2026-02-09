@@ -11,6 +11,8 @@ dsar:
   sla:
     scheduler:
       enabled: false
+    escalation:
+      enabled: false
 
 logging:
   level:

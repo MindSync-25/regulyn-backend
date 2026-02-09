@@ -50,12 +50,24 @@ public class User {
     @Column(name = "updated_by")
     private UUID updatedBy;
 
+    @Column(name = "locked_at")
+    private Instant lockedAt;
+
+    @Column(name = "locked_reason")
+    private String lockedReason;
+
+    @Column(name = "locked_by_user_id")
+    private UUID lockedByUserId;
+
     @PrePersist
     protected void onCreate() {
         if (userId == null) {
             userId = UUID.randomUUID();
         }
         createdAt = Instant.now();
+        if (updatedAt == null) {
+            updatedAt = createdAt;
+        }
     }
 
     @PreUpdate
@@ -150,5 +162,33 @@ public class User {
 
     public void setUpdatedBy(UUID updatedBy) {
         this.updatedBy = updatedBy;
+    }
+
+    public Instant getLockedAt() {
+        return lockedAt;
+    }
+
+    public void setLockedAt(Instant lockedAt) {
+        this.lockedAt = lockedAt;
+    }
+
+    public String getLockedReason() {
+        return lockedReason;
+    }
+
+    public void setLockedReason(String lockedReason) {
+        this.lockedReason = lockedReason;
+    }
+
+    public UUID getLockedByUserId() {
+        return lockedByUserId;
+    }
+
+    public void setLockedByUserId(UUID lockedByUserId) {
+        this.lockedByUserId = lockedByUserId;
+    }
+
+    public boolean isLocked() {
+        return lockedAt != null;
     }
 }

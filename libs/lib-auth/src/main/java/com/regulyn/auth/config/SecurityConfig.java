@@ -35,6 +35,7 @@ public class SecurityConfig {
           auth.requestMatchers("/actuator/health", "/actuator/info").permitAll();
           auth.requestMatchers("/actuator/**").permitAll();
           auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll();
+          auth.requestMatchers("/users/invites/accept").permitAll();
           
           // In local profile, permit /auth/login
           if (isLocalProfile()) {

@@ -45,6 +45,19 @@ public class ScanFinding {
     @Column(name = "confidence", nullable = false)
     private Integer confidence;
 
+    @Column(name = "finding_fingerprint", length = 64)
+    private String findingFingerprint;
+
+    @Column(name = "finding_fingerprint_version", nullable = false)
+    private Short findingFingerprintVersion = 1;
+
+    @Column(name = "normalized_subject")
+    private String normalizedSubject;
+
+    @Type(JsonBinaryType.class)
+    @Column(name = "key_attributes", columnDefinition = "jsonb", nullable = false)
+    private Map<String, Object> keyAttributes = new HashMap<>();
+
     @Type(JsonBinaryType.class)
     @Column(name = "details", columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> details = new HashMap<>();
@@ -136,6 +149,38 @@ public class ScanFinding {
 
     public void setConfidence(Integer confidence) {
         this.confidence = confidence;
+    }
+
+    public String getFindingFingerprint() {
+        return findingFingerprint;
+    }
+
+    public void setFindingFingerprint(String findingFingerprint) {
+        this.findingFingerprint = findingFingerprint;
+    }
+
+    public Short getFindingFingerprintVersion() {
+        return findingFingerprintVersion;
+    }
+
+    public void setFindingFingerprintVersion(Short findingFingerprintVersion) {
+        this.findingFingerprintVersion = findingFingerprintVersion;
+    }
+
+    public String getNormalizedSubject() {
+        return normalizedSubject;
+    }
+
+    public void setNormalizedSubject(String normalizedSubject) {
+        this.normalizedSubject = normalizedSubject;
+    }
+
+    public Map<String, Object> getKeyAttributes() {
+        return keyAttributes;
+    }
+
+    public void setKeyAttributes(Map<String, Object> keyAttributes) {
+        this.keyAttributes = keyAttributes;
     }
 
     public Map<String, Object> getDetails() {

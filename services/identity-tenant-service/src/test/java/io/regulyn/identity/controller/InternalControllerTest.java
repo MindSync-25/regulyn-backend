@@ -4,6 +4,7 @@ import io.regulyn.identity.dto.ValidateApiKeyRequest;
 import io.regulyn.identity.dto.ValidateApiKeyResponse;
 import io.regulyn.identity.filter.InternalAuthFilter;
 import io.regulyn.identity.service.InternalApiKeyService;
+import io.regulyn.identity.service.TenantUsageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,12 +30,15 @@ class InternalControllerTest {
     @Mock
     private InternalApiKeyService internalApiKeyService;
 
+        @Mock
+        private TenantUsageService tenantUsageService;
+
     @BeforeEach
     void setUp() {
         InternalAuthFilter filter = new InternalAuthFilter("change-me-in-production");
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new InternalController(internalApiKeyService))
+                .standaloneSetup(new InternalController(internalApiKeyService, tenantUsageService))
                 .addFilters(filter)
                 .build();
     }
@@ -74,7 +78,7 @@ class InternalControllerTest {
     }
 
     @Test
-    void shouldReturn401WhenApiKeyInvalid() throws Exception {
+        void shouldReturn403WhenApiKeyInvalid() throws Exception {
         when(internalApiKeyService.validateApiKey(anyString()))
                 .thenReturn(ValidateApiKeyResponse.invalid());
 
@@ -82,7 +86,7 @@ class InternalControllerTest {
                 .header("X-Internal-Auth", "change-me-in-production")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"apiKey\":\"invalid-key\"}"))
-                .andExpect(status().isUnauthorized())
+                                .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.valid").value(false));
     }
 }

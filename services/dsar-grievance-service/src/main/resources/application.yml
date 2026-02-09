@@ -31,6 +31,10 @@ evidence:
   service:
     url: http://localhost:8095
 
+notification:
+  service:
+    url: http://localhost:8087
+
 audit:
   schema: dsar
 
@@ -39,3 +43,17 @@ dsar:
     scheduler:
       enabled: true
       cron: "0 */15 * * * *"  # Every 15 minutes
+    escalation:
+      enabled: true
+      cron: "0 */15 * * * *"  # Every 15 minutes
+      thresholds:
+        warningDays: 60
+        criticalDays: 80
+        breachDays: 90
+      recipients:
+        emails: "dpo@example.com,admin@example.com"
+      notification:
+        templateKey: "DSAR_SLA_ESCALATION"
+        fromName: "Regulyn"
+        category: "LEGAL"
+        language: "en"

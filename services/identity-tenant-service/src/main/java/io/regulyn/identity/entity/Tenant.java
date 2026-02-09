@@ -18,9 +18,44 @@ public class Tenant {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private TenantStatus status = TenantStatus.ACTIVE;
+    @Column(nullable = false, length = 50)
+    private String status = "DRAFT";
+
+    @Column(name = "activated_at")
+    private Instant activatedAt;
+
+    @Column(name = "suspended_at")
+    private Instant suspendedAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @Column(name = "admin_bootstrapped_at")
+    private Instant adminBootstrappedAt;
+
+    @Column(name = "admin_bootstrap_user_id")
+    private UUID adminBootstrapUserId;
+
+    @Column(name = "compliance_hold", nullable = false)
+    private Boolean complianceHold = false;
+
+    @Column(name = "compliance_hold_reason")
+    private String complianceHoldReason;
+
+    @Column(name = "delete_requested_at")
+    private Instant deleteRequestedAt;
+
+    @Column(name = "read_only", nullable = false)
+    private Boolean readOnly = false;
+
+    @Column(name = "read_only_reason")
+    private String readOnlyReason;
+
+    @Column(name = "read_only_since")
+    private Instant readOnlySince;
+
+    @Column(name = "plan_code")
+    private String planCode;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -39,16 +74,16 @@ public class Tenant {
         if (tenantId == null) {
             tenantId = UUID.randomUUID();
         }
-        createdAt = Instant.now();
+        Instant now = Instant.now();
+        createdAt = now;
+        if (updatedAt == null) {
+            updatedAt = now;
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
-    }
-
-    public enum TenantStatus {
-        ACTIVE, SUSPENDED, DELETED
     }
 
     // Getters and Setters
@@ -68,12 +103,108 @@ public class Tenant {
         this.name = name;
     }
 
-    public TenantStatus getStatus() {
+    public String getStatus() {
         return status;
     }
 
-    public void setStatus(TenantStatus status) {
+    public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Instant getActivatedAt() {
+        return activatedAt;
+    }
+
+    public void setActivatedAt(Instant activatedAt) {
+        this.activatedAt = activatedAt;
+    }
+
+    public Instant getSuspendedAt() {
+        return suspendedAt;
+    }
+
+    public void setSuspendedAt(Instant suspendedAt) {
+        this.suspendedAt = suspendedAt;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    public Instant getAdminBootstrappedAt() {
+        return adminBootstrappedAt;
+    }
+
+    public void setAdminBootstrappedAt(Instant adminBootstrappedAt) {
+        this.adminBootstrappedAt = adminBootstrappedAt;
+    }
+
+    public UUID getAdminBootstrapUserId() {
+        return adminBootstrapUserId;
+    }
+
+    public void setAdminBootstrapUserId(UUID adminBootstrapUserId) {
+        this.adminBootstrapUserId = adminBootstrapUserId;
+    }
+
+    public Boolean getComplianceHold() {
+        return complianceHold;
+    }
+
+    public void setComplianceHold(Boolean complianceHold) {
+        this.complianceHold = complianceHold;
+    }
+
+    public String getComplianceHoldReason() {
+        return complianceHoldReason;
+    }
+
+    public void setComplianceHoldReason(String complianceHoldReason) {
+        this.complianceHoldReason = complianceHoldReason;
+    }
+
+    public Instant getDeleteRequestedAt() {
+        return deleteRequestedAt;
+    }
+
+    public void setDeleteRequestedAt(Instant deleteRequestedAt) {
+        this.deleteRequestedAt = deleteRequestedAt;
+    }
+
+    public Boolean getReadOnly() {
+        return readOnly;
+    }
+
+    public void setReadOnly(Boolean readOnly) {
+        this.readOnly = readOnly;
+    }
+
+    public String getReadOnlyReason() {
+        return readOnlyReason;
+    }
+
+    public void setReadOnlyReason(String readOnlyReason) {
+        this.readOnlyReason = readOnlyReason;
+    }
+
+    public Instant getReadOnlySince() {
+        return readOnlySince;
+    }
+
+    public void setReadOnlySince(Instant readOnlySince) {
+        this.readOnlySince = readOnlySince;
+    }
+
+    public String getPlanCode() {
+        return planCode;
+    }
+
+    public void setPlanCode(String planCode) {
+        this.planCode = planCode;
     }
 
     public Instant getCreatedAt() {

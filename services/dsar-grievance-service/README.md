@@ -12,6 +12,7 @@
 - **Idempotency**: Duplicate request prevention via idempotency keys
 - **Audit Trail**: Complete audit logging + outbox events for all state transitions
 - **Multi-Tenant**: Strict tenant isolation for all operations
+- **SLA Scheduler**: Marks breached DSARs and emits events
 
 ## Architecture
 
@@ -178,7 +179,7 @@ curl -X POST http://localhost:8084/dsar/{dsarId}/close \
 **Rules:**
 - Only allowed if status is COMPLETED, APPROVED, or REJECTED
 - **Must create evidence bundle** via evidence-reporting-service
-- If evidence service unavailable, returns 503 (DSAR closure requires provable evidence)
+- If evidence service is unavailable, the close operation fails (runtime error)
 - Evidence bundle includes:
   - All evidenceIds from request
   - Auto-generated DSAR summary evidence record
@@ -258,6 +259,22 @@ All DSAR operations emit events for downstream processing:
 - **dsar.rejected**: DSAR rejected
 - **dsar.closed**: DSAR closed with evidence bundle
 - **dsar.sla_breached**: SLA deadline breached (90 days)
+
+## Flyway Migrations (names + purpose)
+1. **V1__init.sql**
+  - Creates `dsar` schema
+  - Creates `service_meta`, `audit_events` + indexes
+2. **V2__create_outbox_table.sql**
+  - Creates `outbox_events` + indexes
+3. **V3__create_dsar_requests_table.sql**
+  - Creates base `dsar_requests`
+4. **V4__enhance_dsar_workflow.sql**
+  - Adds workflow fields to `dsar_requests`
+  - Creates `dsar_status_history` + indexes
+  - Adds due/assignment indexes
+5. **V5__add_dsar_hardening_columns.sql**
+  - Adds idempotency + details_json + close_notes + sla_breached
+  - Adds idempotency unique index and SLA/query indexes
 
 ## SLA Enforcement
 

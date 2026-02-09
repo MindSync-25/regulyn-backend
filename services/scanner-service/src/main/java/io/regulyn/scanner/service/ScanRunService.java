@@ -14,8 +14,11 @@ import io.regulyn.scanner.model.ScanRun;
 import io.regulyn.scanner.model.ScanSource;
 import io.regulyn.scanner.repository.ScanFindingRepository;
 import io.regulyn.scanner.repository.ScanRunRepository;
+import io.regulyn.scanner.website.WebsiteCrawlResult;
+import io.regulyn.scanner.website.WebsiteScanAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -24,9 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -140,22 +141,32 @@ public class ScanRunService {
             // Execute scan based on mode
             List<Finding> findings;
             String scanMode = run.getScanMode();
+            WebsiteCrawlResult websiteCrawlResult = null;
             
-            if ("INVENTORY".equals(scanMode)) {
-                findings = adapter.runInventory(source, run.getSinceAt());
-            } else if ("RETENTION_CANDIDATES".equals(scanMode)) {
-                findings = adapter.runRetentionCandidates(source, run.getSinceAt());
-            } else if ("BOTH".equals(scanMode)) {
-                List<Finding> inventory = adapter.runInventory(source, run.getSinceAt());
-                List<Finding> retention = adapter.runRetentionCandidates(source, run.getSinceAt());
-                inventory.addAll(retention);
-                findings = inventory;
+            if (adapter instanceof WebsiteScanAdapter websiteScanAdapter) {
+                websiteCrawlResult = websiteScanAdapter.crawl(source, run.getSinceAt(), tenantId, run.getRunId(), scanMode);
+                if (websiteCrawlResult.isFailed()) {
+                    throw new IllegalStateException(websiteCrawlResult.getFailureReason());
+                }
+                findings = websiteCrawlResult.getFindings();
             } else {
-                throw new IllegalStateException("Unknown scan mode: " + scanMode);
+                if ("INVENTORY".equals(scanMode)) {
+                    findings = adapter.runInventory(source, run.getSinceAt());
+                } else if ("RETENTION_CANDIDATES".equals(scanMode)) {
+                    findings = adapter.runRetentionCandidates(source, run.getSinceAt());
+                } else if ("BOTH".equals(scanMode)) {
+                    List<Finding> inventory = adapter.runInventory(source, run.getSinceAt());
+                    List<Finding> retention = adapter.runRetentionCandidates(source, run.getSinceAt());
+                    inventory.addAll(retention);
+                    findings = inventory;
+                } else {
+                    throw new IllegalStateException("Unknown scan mode: " + scanMode);
+                }
             }
 
             // Save findings
             int savedCount = 0;
+            List<Finding> persistedFindings = new ArrayList<>();
             for (Finding finding : findings) {
                 ScanFinding entity = new ScanFinding();
                 entity.setTenantId(tenantId);
@@ -167,22 +178,61 @@ public class ScanRunService {
                 entity.setDataCategory(finding.getDataCategory());
                 entity.setRiskLevel(finding.getRiskLevel());
                 entity.setConfidence(finding.getConfidence());
+                entity.setFindingFingerprint(finding.getFindingFingerprint());
+                entity.setFindingFingerprintVersion(
+                    finding.getFindingFingerprintVersion() != null ? finding.getFindingFingerprintVersion() : 1
+                );
+                entity.setNormalizedSubject(finding.getNormalizedSubject());
+                if (finding.getKeyAttributes() != null) {
+                    entity.setKeyAttributes(finding.getKeyAttributes());
+                }
                 if (finding.getDetails() != null) {
                     entity.setDetails(finding.getDetails());
                 }
-                scanFindingRepository.save(entity);
-                savedCount++;
+                try {
+                    scanFindingRepository.saveAndFlush(entity);
+                    savedCount++;
+                    persistedFindings.add(finding);
+                } catch (DataIntegrityViolationException ex) {
+                    log.debug("Duplicate finding ignored for run {}", run.getRunId());
+                }
             }
 
             // Update run status
-            run.setStatus("SUCCEEDED");
+            boolean partial = websiteCrawlResult != null && websiteCrawlResult.isPartial();
+            run.setStatus(partial ? "PARTIAL" : "SUCCEEDED");
             run.setFinishedAt(Instant.now());
             run.setFindingsCount(savedCount);
-            run.setResultHash(computeResultHash(findings));
+            run.setResultHash(computeResultHash(persistedFindings));
+            if (partial) {
+                run.setErrorMessage(websiteCrawlResult.getPartialReason());
+            }
             run = scanRunRepository.save(run);
 
-            // Audit
-            auditWriter.write(com.regulyn.common.audit.AuditEvent.builder()
+                // Audit + Outbox for run completion
+                if (partial) {
+                auditWriter.write(com.regulyn.common.audit.AuditEvent.builder()
+                    .tenantId(tenantId)
+                    .action("scanner.run_partial")
+                    .entityType("SCAN_RUN")
+                    .entityId(run.getRunId().toString())
+                    .payloadHash("N/A")
+                    .build());
+
+                EventEnvelopeV1 partialEvent = EventFactory.create(
+                    "scanner.run_partial",
+                    "scanner-service",
+                    "SCAN_RUN",
+                    run.getRunId().toString(),
+                    Map.of(
+                        "reason", websiteCrawlResult.getPartialReason(),
+                        "fetchedPages", websiteCrawlResult.getFetchedPages(),
+                        "failures", websiteCrawlResult.getFailures()
+                    )
+                );
+                outboxWriter.write(partialEvent);
+                } else {
+                auditWriter.write(com.regulyn.common.audit.AuditEvent.builder()
                     .tenantId(tenantId)
                     .action("scanner.run_succeeded")
                     .entityType("SCAN_RUN")
@@ -190,25 +240,46 @@ public class ScanRunService {
                     .payloadHash("N/A")
                     .build());
 
-            // Outbox
-            EventEnvelopeV1 succeededEvent = EventFactory.create(
+                EventEnvelopeV1 succeededEvent = EventFactory.create(
                     "scanner.run_succeeded",
                     "scanner-service",
                     "SCAN_RUN",
                     run.getRunId().toString(),
                     run
-            );
-            outboxWriter.write(succeededEvent);
+                );
+                outboxWriter.write(succeededEvent);
+                }
 
-            // Findings created event
-            EventEnvelopeV1 findingsEvent = EventFactory.create(
+                // Findings created event
+                EventEnvelopeV1 findingsEvent = EventFactory.create(
                     "scanner.findings_created",
                     "scanner-service",
                     "SCAN_FINDINGS",
                     run.getRunId().toString(),
                     Map.of("findingsCount", savedCount)
-            );
-            outboxWriter.write(findingsEvent);
+                );
+                outboxWriter.write(findingsEvent);
+
+                if (savedCount > 0) {
+                Map<String, Object> payload = buildFindingDetectedPayload(run.getRunId(), persistedFindings);
+
+                auditWriter.write(com.regulyn.common.audit.AuditEvent.builder()
+                    .tenantId(tenantId)
+                    .action("scanner.finding_detected")
+                    .entityType("SCAN_FINDINGS")
+                    .entityId(run.getRunId().toString())
+                    .payloadHash("N/A")
+                    .build());
+
+                EventEnvelopeV1 findingDetectedEvent = EventFactory.create(
+                    "scanner.finding_detected",
+                    "scanner-service",
+                    "SCAN_FINDINGS",
+                    run.getRunId().toString(),
+                    payload
+                );
+                outboxWriter.write(findingDetectedEvent);
+                }
 
         } catch (Exception e) {
             log.error("Scan execution failed for run {}: {}", runId, e.getMessage(), e);
@@ -239,6 +310,36 @@ public class ScanRunService {
         }
 
         return toResponse(run);
+    }
+
+    private Map<String, Object> buildFindingDetectedPayload(UUID runId, List<Finding> findings) {
+        Map<String, Integer> kindCounts = new HashMap<>();
+        List<String> fingerprints = new ArrayList<>();
+
+        for (Finding finding : findings) {
+            String kind = null;
+            if (finding.getDetails() != null) {
+                Object kindValue = finding.getDetails().get("websiteFindingKind");
+                if (kindValue != null) {
+                    kind = kindValue.toString();
+                }
+            }
+            if (kind == null) {
+                kind = finding.getFindingType() != null ? finding.getFindingType() : "UNKNOWN";
+            }
+            kindCounts.put(kind, kindCounts.getOrDefault(kind, 0) + 1);
+
+            if (finding.getFindingFingerprint() != null && fingerprints.size() < 50) {
+                fingerprints.add(finding.getFindingFingerprint());
+            }
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("runId", runId.toString());
+        payload.put("count", findings.size());
+        payload.put("fingerprints", fingerprints);
+        payload.put("kindCounts", kindCounts);
+        return payload;
     }
 
     @Transactional(readOnly = true)

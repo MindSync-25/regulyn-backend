@@ -13,6 +13,10 @@ public class Finding {
     private String riskLevel;
     private Integer confidence;
     private Map<String, Object> details;
+    private String findingFingerprint;
+    private Short findingFingerprintVersion;
+    private String normalizedSubject;
+    private Map<String, Object> keyAttributes;
 
     // Getters and Setters
     public String getFindingType() {
@@ -77,5 +81,37 @@ public class Finding {
 
     public void setDetails(Map<String, Object> details) {
         this.details = details;
+    }
+
+    public String getFindingFingerprint() {
+        return findingFingerprint;
+    }
+
+    public void setFindingFingerprint(String findingFingerprint) {
+        this.findingFingerprint = findingFingerprint;
+    }
+
+    public Short getFindingFingerprintVersion() {
+        return findingFingerprintVersion;
+    }
+
+    public void setFindingFingerprintVersion(Short findingFingerprintVersion) {
+        this.findingFingerprintVersion = findingFingerprintVersion;
+    }
+
+    public String getNormalizedSubject() {
+        return normalizedSubject;
+    }
+
+    public void setNormalizedSubject(String normalizedSubject) {
+        this.normalizedSubject = normalizedSubject;
+    }
+
+    public Map<String, Object> getKeyAttributes() {
+        return keyAttributes;
+    }
+
+    public void setKeyAttributes(Map<String, Object> keyAttributes) {
+        this.keyAttributes = keyAttributes;
     }
 }

@@ -32,7 +32,8 @@ public class CreateScanSourceRequest {
     // Enums
     public enum SourceType {
         MOCK,
-        HTTP_DISCOVERY
+        HTTP_DISCOVERY,
+        WEBSITE
     }
 
     public enum SourceStatus {

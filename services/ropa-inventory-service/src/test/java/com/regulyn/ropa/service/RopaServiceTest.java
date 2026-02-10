@@ -42,6 +42,8 @@ public class RopaServiceTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.schemas", () -> "ropa");
+        registry.add("spring.jpa.properties.hibernate.default_schema", () -> "ropa");
+        registry.add("audit.schema", () -> "ropa");
     }
 
     @Autowired

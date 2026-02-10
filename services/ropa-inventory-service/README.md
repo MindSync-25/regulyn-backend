@@ -22,6 +22,46 @@ The ROPA Inventory Service provides a complete system for managing and documenti
 
 ---
 
+## Database (ropa schema)
+
+### V1__init.sql
+- **ropa schema**: created if missing
+- **service_meta**: service metadata entry
+- **audit_events**: append-only audit table
+
+### V2__create_outbox_table.sql
+- **outbox_events**: outbox pattern table (ropa schema)
+
+### V4__ropa_domain.sql
+
+#### ropa_systems
+- **Columns**: system_id, tenant_id, system_name (unique per tenant), system_type, owner_team, location, criticality, enabled, metadata (JSONB), created_at, updated_at
+
+#### ropa_data_categories
+- **Columns**: data_category_id, tenant_id, category_key (unique per tenant), label, sensitive, metadata (JSONB), created_at
+
+#### ropa_activity_versions
+- **Columns**: version_id, tenant_id, activity_id, version_number, status (DRAFT|PUBLISHED|RETIRED), activity_name, purpose, lawful_basis, data_principal_type, description, retention_policy, retention_days, risk_level, enabled, metadata (JSONB), published_at, created_at
+- **Uniqueness**: (tenant_id, activity_id, version_number)
+
+#### ropa_activity_links
+- **Columns**: link_id, tenant_id, activity_id, version_id, notes, created_at
+
+#### ropa_activity_systems
+- **Columns**: id, tenant_id, version_id, system_id
+- **Uniqueness**: (tenant_id, version_id, system_id)
+
+#### ropa_activity_data_categories
+- **Columns**: id, tenant_id, version_id, data_category_id
+- **Uniqueness**: (tenant_id, version_id, data_category_id)
+
+#### ropa_activity_vendors
+- **Columns**: id, tenant_id, version_id, vendor_id (reference only, no FK)
+- **Uniqueness**: (tenant_id, version_id, vendor_id)
+
+#### ropa_exports
+- **Columns**: export_id, tenant_id, bundle_id, evidence_export_id, created_at
+
 ## API Endpoints
 
 ### Systems / Data Stores
@@ -151,6 +191,72 @@ Content-Type: application/json
 
 {
   "title": "Q1 2026 ROPA Audit",
+
+#### Retention Matrix Export (Evidence Artifact)
+```bash
+POST /retention/exports/matrix
+Content-Type: application/json
+
+{
+  "systemIds": ["<system-uuid-1>", "<system-uuid-2>"],
+  "activityStatus": "PUBLISHED",
+  "includeDisabled": false
+}
+```
+
+Response (example):
+```json
+{
+  "reportExportId": "<uuid>",
+  "status": "CREATED",
+  "artifactRef": "evidence/retention/<id>",
+  "artifactHash": "<sha256>",
+  "rows": [ ... ]
+}
+```
+
+#### Cross-Border Report Export (Evidence Artifact)
+```bash
+POST /cross-border/exports/report
+Content-Type: application/json
+
+{
+  "filters": {
+    "vendorId": "<vendor-uuid>",
+    "dataCategoryId": "<category-uuid>",
+    "sourceRegion": "INDIA",
+    "destinationRegion": "US"
+  }
+}
+```
+
+Response (example):
+```json
+{
+  "reportExportId": "<uuid>",
+  "status": "CREATED",
+  "artifactRef": "evidence/cross-border/<id>",
+  "artifactHash": "<sha256>",
+  "rowCount": 3,
+  "rows": [ ... ]
+}
+```
+
+#### Evidence Artifacts & Idempotency
+- Exports persist an evidence artifact in evidence-reporting-service via `POST /evidence/artifacts`.
+- The request payload is hashed (SHA-256) and stored as `payload_hash` in `ropa_report_exports`.
+- Replays with the same `X-Idempotency-Key` and matching `payload_hash` return the original export.
+- Mismatched payloads return **409 CONFLICT**.
+
+**Audit Events:**
+- `RETENTION_MATRIX_EXPORT_REQUESTED` / `RETENTION_MATRIX_EXPORT_CREATED`
+- `CROSS_BORDER_REPORT_EXPORT_REQUESTED` / `CROSS_BORDER_REPORT_EXPORT_CREATED`
+- `ROPA_EVIDENCE_ARTIFACT_STORED`
+
+**Outbox Events:**
+- `ropa.retention_matrix_export_requested` / `ropa.retention_matrix_export_created`
+- `ropa.cross_border_report_export_requested` / `ropa.cross_border_report_export_created`
+- `ropa.ropa_evidence_artifact_stored`
   "periodFrom": "2026-01-01",
   "periodTo": "2026-03-31",
   "filters": {

@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface RopaDataCategoryRepository extends JpaRepository<RopaDataCategory, UUID> {
 
     List<RopaDataCategory> findByTenantId(UUID tenantId);
+
+    List<RopaDataCategory> findByTenantIdAndDataCategoryIdIn(UUID tenantId, List<UUID> dataCategoryIds);
 }

@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Locale;
 import java.util.UUID;
 
 @RestController
@@ -111,7 +110,7 @@ public class VendorAccessExportsController {
         if (format == null || format.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "format is required");
         }
-        String normalizedFormat = format.trim().toUpperCase(Locale.ROOT);
+        String normalizedFormat = format.trim().toUpperCase(java.util.Locale.ROOT);
         if (!normalizedFormat.equals("CSV") && !normalizedFormat.equals("JSON")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "format must be CSV or JSON");
         }

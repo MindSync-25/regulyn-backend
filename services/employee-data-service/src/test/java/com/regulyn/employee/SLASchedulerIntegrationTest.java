@@ -53,6 +53,7 @@ class SLASchedulerIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.task.scheduling.enabled", () -> false);
     }
 
     @LocalServerPort

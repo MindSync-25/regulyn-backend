@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(scanBasePackages = {
     "com.regulyn.employee",
+  "com.regulyn.common.audit",
     "com.regulyn.auth",
     "com.regulyn.events",
     "com.regulyn.observability"

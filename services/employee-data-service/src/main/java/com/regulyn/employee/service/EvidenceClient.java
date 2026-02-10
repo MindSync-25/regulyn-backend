@@ -5,10 +5,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
@@ -62,6 +66,70 @@ public class EvidenceClient {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, 
                     "Evidence service unavailable", e);
         }
+    }
+
+    /**
+     * Store an evidence artifact
+     * POST /evidence/artifacts
+     */
+    public EvidenceArtifactResponse createArtifact(
+            UUID tenantId,
+            String type,
+            String filename,
+            String contentType,
+            String sha256,
+            byte[] bytes) {
+        try {
+            String url = baseUrl + "/evidence/artifacts";
+
+            Map<String, Object> payload = Map.of(
+                    "tenantId", tenantId.toString(),
+                    "type", type,
+                    "filename", filename,
+                    "contentType", contentType,
+                    "sha256", sha256,
+                    "bytes", Base64.getEncoder().encodeToString(bytes)
+            );
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    Map.class);
+
+            if ((response.getStatusCode() == HttpStatus.OK || response.getStatusCode() == HttpStatus.CREATED)
+                    && response.getBody() != null) {
+                Object artifactRef = response.getBody().get("artifactRef");
+                Object returnedHash = response.getBody().get("sha256");
+                if (artifactRef != null) {
+                    return new EvidenceArtifactResponse(
+                            artifactRef.toString(),
+                            returnedHash != null ? returnedHash.toString() : sha256
+                    );
+                }
+            }
+
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to parse artifact response from evidence service");
+        } catch (HttpClientErrorException e) {
+            log.error("Evidence service rejected artifact payload", e);
+            throw new ResponseStatusException(e.getStatusCode(), "Evidence service rejected artifact", e);
+        } catch (HttpServerErrorException | ResourceAccessException e) {
+            log.error("Evidence service unavailable", e);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Evidence service unavailable", e);
+        } catch (RestClientException e) {
+            log.error("Error creating artifact in evidence service", e);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Evidence service unavailable", e);
+        }
+    }
+
+    public record EvidenceArtifactResponse(String artifactRef, String sha256) {
     }
 
     /**

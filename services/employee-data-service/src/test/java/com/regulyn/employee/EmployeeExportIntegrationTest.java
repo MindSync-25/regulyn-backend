@@ -55,6 +55,7 @@ class EmployeeExportIntegrationTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("evidence.service.url", () -> "http://localhost:" + wireMock.getPort());
+                registry.add("spring.task.scheduling.enabled", () -> false);
     }
 
     @LocalServerPort

@@ -23,6 +23,15 @@ spring:
     schemas: employee
     locations: classpath:db/migration
 
+audit:
+  schema: employee
+
+employee:
+  resumeRetention:
+    cleanup:
+      fixedDelay: PT5M
+      batchSize: 100
+
 # Evidence service integration
 evidence:
   service:

@@ -33,6 +33,13 @@
 - **Idempotency**: Deduplication via unique (tenant, employee, idempotencyKey)
 - **Multi-tenancy**: Full tenant isolation
 
+### What the Service Does (Implementation Highlights)
+- **Request Lifecycle**: Validates transitions against the 9‑status state machine with maker‑checker gating.
+- **SLA Enforcement**: Tracks `due_at` and marks SLA breaches on a scheduled scan (every 15 minutes).
+- **Evidence Bundling**: On request close, creates an evidence bundle; if evidence service is down, returns 503 and persists failure details.
+- **Exports**: Creates employee compliance exports and provides download links via evidence service.
+- **Audit + Outbox**: Writes audit history and emits outbox events for all critical transitions.
+
 ## API Endpoints (15 total)
 
 ### Employee Directory (2 endpoints)
@@ -127,3 +134,12 @@ server:
 6. **employee_exports**: export_id, bundle_id, evidence_export_id
 
 See Flyway migration `V4__employee_domain.sql` for full schema.
+
+## Flyway Migrations
+
+- **V1__init.sql**
+  - Creates `employee` schema and base metadata/audit tables.
+- **V2__create_outbox_table.sql**
+  - Adds `outbox_events` table for async event publishing.
+- **V4__employee_domain.sql**
+  - Defines employee domain tables (employees, hr_purposes, employee_data_records, employee_requests, employee_request_status_history, employee_exports).

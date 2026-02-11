@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -37,6 +38,7 @@ public class ConsentService {
     private final ConsentStateMachine stateMachine;
     private final ConsentStatusHistoryService historyService;
     private final EvidenceServiceClient evidenceClient;
+    private final AgeRuleService ageRuleService;
     private final AuditWriter auditWriter;
     private final OutboxWriter outboxWriter;
     
@@ -49,6 +51,7 @@ public class ConsentService {
             ConsentStateMachine stateMachine,
             ConsentStatusHistoryService historyService,
             EvidenceServiceClient evidenceClient,
+            AgeRuleService ageRuleService,
             AuditWriter auditWriter,
             OutboxWriter outboxWriter) {
         this.consentRepository = consentRepository;
@@ -59,6 +62,7 @@ public class ConsentService {
         this.stateMachine = stateMachine;
         this.historyService = historyService;
         this.evidenceClient = evidenceClient;
+        this.ageRuleService = ageRuleService;
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
     }
@@ -114,6 +118,31 @@ public class ConsentService {
         consent.setIdempotencyKey(request.idempotencyKey());
         consent.setValidFrom(request.validFrom());
         consent.setValidTo(request.validTo());
+
+        String regionCountryCode = resolveRegionCountry(child, request);
+        String regionStateCode = resolveRegionState(child, request);
+        AgeRuleService.AgeEvaluationResult evaluation = ageRuleService.evaluate(
+            tenantId,
+            child.getChildId(),
+            child.getDateOfBirth(),
+            regionCountryCode,
+            regionStateCode,
+            LocalDate.now()
+        );
+
+        ageRuleService.publishAgeEvaluation(actorId, evaluation);
+
+        if (child.isGuardianAuthorityRevoked()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "ADULT_CONSENT_REQUIRED");
+        }
+
+        if (!evaluation.isMinor()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "CHILD_IS_ADULT");
+        }
+
+        consent.setRegionCountryCode(evaluation.regionCountryCode());
+        consent.setRegionStateCode(evaluation.regionStateCode());
+        consent.setThresholdAgeYears(evaluation.thresholdAgeYears());
         
         consent = consentRepository.save(consent);
         
@@ -151,6 +180,29 @@ public class ConsentService {
         
         return new CreateConsentResponse(consent.getConsentId(), consent.getStatus());
     }
+
+    private String resolveRegionCountry(Child child, CreateConsentRequest request) {
+        if (child.getRegionCountryCode() != null && !child.getRegionCountryCode().isBlank()) {
+            return child.getRegionCountryCode();
+        }
+        if (child.getCountry() != null && !child.getCountry().isBlank()) {
+            return child.getCountry();
+        }
+        if (request.regionCountryCode() != null && !request.regionCountryCode().isBlank()) {
+            return request.regionCountryCode();
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "REGION_REQUIRED");
+    }
+
+    private String resolveRegionState(Child child, CreateConsentRequest request) {
+        if (child.getRegionStateCode() != null && !child.getRegionStateCode().isBlank()) {
+            return child.getRegionStateCode();
+        }
+        if (request.regionStateCode() != null && !request.regionStateCode().isBlank()) {
+            return request.regionStateCode();
+        }
+        return null;
+    }
     
     @Transactional
     public ApproveConsentResponse approveConsent(UUID consentId, ApproveConsentRequest request) {
@@ -171,6 +223,10 @@ public class ConsentService {
         String currentStatus = consent.getStatus();
         String newStatus = "APPROVED".equals(request.decision()) ? 
             ConsentStateMachine.STATUS_APPROVED : ConsentStateMachine.STATUS_REJECTED;
+
+        if (ConsentStateMachine.STATUS_APPROVED.equals(newStatus)) {
+            assertSignedArtifactPresent(consent);
+        }
         
         // Validate transition
         if (!stateMachine.canTransition(currentStatus, newStatus)) {
@@ -265,6 +321,8 @@ public class ConsentService {
         GuardianConsent consent = getConsent(consentId);
         
         String currentStatus = consent.getStatus();
+
+        assertSignedArtifactPresent(consent);
         
         // Validate can close
         if (!stateMachine.canTransition(currentStatus, ConsentStateMachine.STATUS_CLOSED)) {
@@ -398,5 +456,31 @@ public class ConsentService {
         } catch (NoSuchAlgorithmException e) {
             return "";
         }
+    }
+
+    private void assertSignedArtifactPresent(GuardianConsent consent) {
+        if (!hasVerifiedSignedArtifact(consent)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "SIGNATURE_REQUIRED");
+        }
+    }
+
+    private boolean hasVerifiedSignedArtifact(GuardianConsent consent) {
+        if (consent.getSignedArtifactId() != null) {
+            Optional<ConsentSignedArtifact> artifact = artifactRepository.findById(consent.getSignedArtifactId());
+            if (artifact.isPresent()) {
+                return isArtifactValid(artifact.get());
+            }
+        }
+
+        Optional<ConsentSignedArtifact> artifact = artifactRepository.findByConsentId(consent.getConsentId());
+        return artifact.map(this::isArtifactValid).orElse(false);
+    }
+
+    private boolean isArtifactValid(ConsentSignedArtifact artifact) {
+        if (artifact.getArtifactRef() == null || artifact.getArtifactRef().isBlank()) {
+            return false;
+        }
+        Boolean verified = artifact.getSignatureVerified();
+        return verified == null || verified;
     }
 }

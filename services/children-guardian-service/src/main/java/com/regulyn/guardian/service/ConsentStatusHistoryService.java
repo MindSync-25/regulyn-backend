@@ -2,6 +2,7 @@ package com.regulyn.guardian.service;
 
 import com.regulyn.guardian.entity.ConsentStatusHistory;
 import com.regulyn.guardian.repository.ConsentStatusHistoryRepository;
+import com.regulyn.auth.context.TenantContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ public class ConsentStatusHistoryService {
         String reason
     ) {
         ConsentStatusHistory history = new ConsentStatusHistory();
+        history.setTenantId(TenantContextHolder.getContext().getTenantId());
         history.setConsentId(consentId);
         history.setFromStatus(fromStatus);
         history.setToStatus(toStatus);

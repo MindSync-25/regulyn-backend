@@ -29,7 +29,11 @@ public record CreateConsentRequest(
     
     Boolean requiresApproval,
     
-    String idempotencyKey
+    String idempotencyKey,
+
+    String regionCountryCode,
+
+    String regionStateCode
 ) {
     public record SignedArtifactDto(
         @NotBlank(message = "artifactRef is required")

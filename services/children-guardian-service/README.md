@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Children Guardian Service implements comprehensive age-gating and guardian consent workflow compliance for data protection regulations (GDPR Article 8, India DPDP 2023, COPPA). It provides:
+The Children Guardian Service implements age-gating and guardian consent workflows for data protection regulations (GDPR Article 8, India DPDP 2023, COPPA). It provides:
 
 - **Age-Gating**: Automatic detection of minors (< 18 years) requiring guardian consent
 - **Guardian Verification**: Role-based guardian verification workflow
@@ -16,13 +16,20 @@ The Children Guardian Service implements comprehensive age-gating and guardian c
 
 ### Core Components
 
-1. **Database Schema**: `children` (PostgreSQL)
-   - `children` - child profiles with date of birth and age-gating
-   - `guardians` - guardian records with verification status
-   - `guardian_consents` - consent lifecycle with state machine
-   - `consent_signed_artifacts` - artifact metadata (no file storage)
-   - `consent_status_history` - append-only audit trail
-   - `children_exports` - export tracking for compliance
+1. **Database Schemas** (PostgreSQL)
+
+  **children schema (active domain)**
+  - `children.children` - child profiles with date of birth and age-gating
+  - `children.guardians` - guardian records with verification status
+  - `children.guardian_consents` - consent lifecycle with state machine
+  - `children.consent_signed_artifacts` - artifact metadata (no file storage)
+  - `children.consent_status_history` - append-only audit trail
+  - `children.children_exports` - export tracking for compliance
+
+  **guardian schema (legacy workflow tables still present)**
+  - `guardian.child_profiles`
+  - `guardian.guardian_verifications`
+  - `guardian.guardian_consents`
 
 2. **State Machine**: Consent status transitions
    ```
@@ -34,6 +41,11 @@ The Children Guardian Service implements comprehensive age-gating and guardian c
 3. **Guardian Eligibility**: Only `VERIFIED` guardians (not `DISABLED`) can create consents
 
 4. **Evidence Integration**: Consent closure requires evidence service availability (returns 503 if down)
+
+### Code Packages
+
+- `com.regulyn.guardian.*` holds the active REST API, services, entities, repositories, and DTOs.
+- `com.regulyn.children.*` currently only provides a health check controller.
 
 ## API Endpoints
 
@@ -149,3 +161,12 @@ Implements:
 
 Age threshold configurable (default: 18 years).
 - lib-observability
+
+---
+
+## Flyway Migrations
+
+- **V1__init.sql**: guardian schema + audit tables
+- **V2__create_outbox_table.sql**: outbox table
+- **V3__create_guardian_workflow_tables.sql**: legacy guardian workflow tables
+- **V4__children_guardian_domain.sql**: children domain tables (active)

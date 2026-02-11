@@ -66,6 +66,24 @@ public class GuardianConsent {
     
     @Column(name = "evidence_bundle_id")
     private UUID evidenceBundleId;
+
+    @Column(name = "esign_request_id")
+    private UUID esignRequestId;
+
+    @Column(name = "signed_artifact_id")
+    private UUID signedArtifactId;
+
+    @Column(name = "majority_date")
+    private LocalDate majorityDate;
+
+    @Column(name = "region_country_code")
+    private String regionCountryCode;
+
+    @Column(name = "region_state_code")
+    private String regionStateCode;
+
+    @Column(name = "threshold_age_years")
+    private Short thresholdAgeYears;
     
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -236,6 +254,54 @@ public class GuardianConsent {
     
     public void setEvidenceBundleId(UUID evidenceBundleId) {
         this.evidenceBundleId = evidenceBundleId;
+    }
+
+    public UUID getEsignRequestId() {
+        return esignRequestId;
+    }
+
+    public void setEsignRequestId(UUID esignRequestId) {
+        this.esignRequestId = esignRequestId;
+    }
+
+    public UUID getSignedArtifactId() {
+        return signedArtifactId;
+    }
+
+    public void setSignedArtifactId(UUID signedArtifactId) {
+        this.signedArtifactId = signedArtifactId;
+    }
+
+    public LocalDate getMajorityDate() {
+        return majorityDate;
+    }
+
+    public void setMajorityDate(LocalDate majorityDate) {
+        this.majorityDate = majorityDate;
+    }
+
+    public String getRegionCountryCode() {
+        return regionCountryCode;
+    }
+
+    public void setRegionCountryCode(String regionCountryCode) {
+        this.regionCountryCode = regionCountryCode;
+    }
+
+    public String getRegionStateCode() {
+        return regionStateCode;
+    }
+
+    public void setRegionStateCode(String regionStateCode) {
+        this.regionStateCode = regionStateCode;
+    }
+
+    public Short getThresholdAgeYears() {
+        return thresholdAgeYears;
+    }
+
+    public void setThresholdAgeYears(Short thresholdAgeYears) {
+        this.thresholdAgeYears = thresholdAgeYears;
     }
     
     public Instant getCreatedAt() {

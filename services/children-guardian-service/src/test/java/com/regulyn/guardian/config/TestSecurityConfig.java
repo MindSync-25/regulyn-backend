@@ -10,6 +10,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -58,6 +61,12 @@ public class TestSecurityConfig {
                     );
 
                     TenantContextHolder.setContext(context);
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                        userId,
+                        null,
+                        roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toSet())
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
 
                 } catch (Exception e) {
                     // Invalid context header, continue without context
@@ -68,6 +77,7 @@ public class TestSecurityConfig {
                 filterChain.doFilter(request, response);
             } finally {
                 TenantContextHolder.clear();
+                SecurityContextHolder.clearContext();
             }
         }
     }

@@ -11,6 +11,9 @@ public class ConsentStatusHistory {
     @Id
     @Column(name = "history_id")
     private UUID historyId;
+
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
     
     @Column(name = "consent_id", nullable = false)
     private UUID consentId;
@@ -43,6 +46,14 @@ public class ConsentStatusHistory {
     
     public void setHistoryId(UUID historyId) {
         this.historyId = historyId;
+    }
+
+    public UUID getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(UUID tenantId) {
+        this.tenantId = tenantId;
     }
     
     public UUID getConsentId() {

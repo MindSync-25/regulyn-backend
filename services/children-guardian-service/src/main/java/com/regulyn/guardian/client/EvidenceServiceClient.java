@@ -7,6 +7,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -147,6 +148,79 @@ public class EvidenceServiceClient {
             );
         }
     }
+
+        /**
+         * Store a signed artifact
+         * POST /evidence/artifacts
+         */
+        public EvidenceArtifactResponse storeSignedArtifact(
+            UUID tenantId,
+            UUID childId,
+            UUID guardianId,
+            UUID consentId,
+            String providerEnvelopeId,
+            String docType,
+            String contentType,
+            String filename,
+            String sha256,
+            byte[] bytes
+        ) {
+        String url = evidenceBaseUrl + "/evidence/artifacts";
+
+        Map<String, Object> metadata = Map.of(
+            "childId", childId != null ? childId.toString() : "",
+            "guardianId", guardianId != null ? guardianId.toString() : "",
+            "consentId", consentId != null ? consentId.toString() : "",
+            "providerEnvelopeId", providerEnvelopeId != null ? providerEnvelopeId : "",
+            "source", "children-guardian-service"
+        );
+
+        Map<String, Object> request = Map.of(
+            "tenantId", tenantId.toString(),
+            "type", docType,
+            "filename", filename != null ? filename : "signed-document",
+            "contentType", contentType != null ? contentType : "application/pdf",
+            "sha256", sha256,
+            "bytes", Base64.getEncoder().encodeToString(bytes),
+            "metadata", metadata
+        );
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                entity,
+                Map.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+            Object ref = response.getBody().get("artifactRef");
+            if (ref != null) {
+                String returnedHash = response.getBody().getOrDefault("sha256", sha256).toString();
+                return new EvidenceArtifactResponse(ref.toString(), returnedHash);
+            }
+            }
+
+            throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Evidence service failed to store artifact"
+            );
+
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Evidence service unavailable: " + e.getMessage(),
+                e
+            );
+        }
+        }
+
+        public record EvidenceArtifactResponse(String artifactRef, String sha256) {
+        }
     
     /**
      * Download export

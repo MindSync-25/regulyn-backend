@@ -13,6 +13,7 @@ import com.regulyn.guardian.dto.CreateChildRequest;
 import com.regulyn.guardian.dto.CreateChildResponse;
 import com.regulyn.guardian.entity.Child;
 import com.regulyn.guardian.repository.ChildRepository;
+import com.regulyn.guardian.service.AgeRuleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -35,16 +36,19 @@ public class ChildService {
     private static final int AGE_GATING_THRESHOLD = 18;
     
     private final ChildRepository childRepository;
+    private final AgeRuleService ageRuleService;
     private final AuditWriter auditWriter;
     private final OutboxWriter outboxWriter;
     private final ObjectMapper objectMapper;
     
     public ChildService(
             ChildRepository childRepository,
+            AgeRuleService ageRuleService,
             AuditWriter auditWriter,
             OutboxWriter outboxWriter,
             ObjectMapper objectMapper) {
         this.childRepository = childRepository;
+        this.ageRuleService = ageRuleService;
         this.auditWriter = auditWriter;
         this.outboxWriter = outboxWriter;
         this.objectMapper = objectMapper;
@@ -67,6 +71,9 @@ public class ChildService {
         child.setFullName(request.fullName());
         child.setDateOfBirth(request.dateOfBirth());
         child.setCountry(request.country());
+        String regionCountryCode = normalizeRegionCountry(request.regionCountryCode(), request.country());
+        child.setRegionCountryCode(regionCountryCode);
+        child.setRegionStateCode(normalizeRegionState(request.regionStateCode()));
         child.setStatus(request.status() != null ? request.status() : "ACTIVE");
         
         // Set metadata
@@ -79,6 +86,18 @@ public class ChildService {
         // Calculate age and age-gating
         int ageYears = calculateAge(child.getDateOfBirth());
         boolean isMinor = ageYears < AGE_GATING_THRESHOLD;
+        if (regionCountryCode != null) {
+            AgeRuleService.AgeEvaluationResult evaluation = ageRuleService.evaluate(
+                tenantId,
+                child.getChildId(),
+                child.getDateOfBirth(),
+                regionCountryCode,
+                child.getRegionStateCode(),
+                LocalDate.now()
+            );
+            ageYears = evaluation.ageYears();
+            isMinor = evaluation.isMinor();
+        }
         boolean requiresGuardianConsent = isMinor;
         
         writeAudit(actorId, "child.created", "Child", child.getChildId(), 
@@ -108,6 +127,23 @@ public class ChildService {
             return 0;
         }
         return Period.between(dateOfBirth, LocalDate.now()).getYears();
+    }
+
+    private String normalizeRegionCountry(String regionCountryCode, String fallbackCountry) {
+        String value = regionCountryCode != null && !regionCountryCode.isBlank()
+                ? regionCountryCode
+                : fallbackCountry;
+        if (value == null) {
+            return null;
+        }
+        return value.trim().toUpperCase();
+    }
+
+    private String normalizeRegionState(String regionStateCode) {
+        if (regionStateCode == null || regionStateCode.isBlank()) {
+            return null;
+        }
+        return regionStateCode.trim().toUpperCase();
     }
     
     private void writeAudit(UUID actorId, String action, String entityType, UUID entityId, Map<String, ?> details) {

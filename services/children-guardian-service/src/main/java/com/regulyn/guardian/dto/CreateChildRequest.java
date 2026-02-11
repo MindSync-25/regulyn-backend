@@ -18,6 +18,10 @@ public record CreateChildRequest(
     LocalDate dateOfBirth,
     
     String country,
+
+    String regionCountryCode,
+
+    String regionStateCode,
     
     @NotBlank(message = "status is required")
     String status,

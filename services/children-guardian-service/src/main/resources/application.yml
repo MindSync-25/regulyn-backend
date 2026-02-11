@@ -16,6 +16,22 @@ spring:
 audit:
   schema: children
 
+children:
+  esign:
+    defaultProvider: STUB
+    stub:
+      hmacSecret: test-secret
+
+evidence:
+  service:
+    baseUrl: http://localhost:8083
+  reporting:
+    baseUrl: http://localhost:8087
+
+notification:
+  service:
+    baseUrl: http://localhost:8086
+
 server:
   port: 8089
 

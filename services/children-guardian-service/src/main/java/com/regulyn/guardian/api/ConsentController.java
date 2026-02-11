@@ -2,6 +2,7 @@ package com.regulyn.guardian.api;
 
 import com.regulyn.guardian.dto.*;
 import com.regulyn.guardian.service.ConsentService;
+import com.regulyn.guardian.service.EsignRequestService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,9 +14,11 @@ import java.util.UUID;
 public class ConsentController {
     
     private final ConsentService consentService;
+    private final EsignRequestService esignRequestService;
     
-    public ConsentController(ConsentService consentService) {
+    public ConsentController(ConsentService consentService, EsignRequestService esignRequestService) {
         this.consentService = consentService;
+        this.esignRequestService = esignRequestService;
     }
     
     @PostMapping
@@ -45,6 +48,15 @@ public class ConsentController {
             @PathVariable("consentId") UUID consentId,
             @RequestBody CloseConsentRequest request) {
         CloseConsentResponse response = consentService.closeConsent(consentId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{consentId}/esign-requests")
+    public ResponseEntity<CreateEsignRequestResponse> createEsignRequest(
+            @PathVariable("consentId") UUID consentId,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody CreateEsignRequestRequest request) {
+        CreateEsignRequestResponse response = esignRequestService.createEsignRequest(consentId, request, idempotencyKey);
         return ResponseEntity.ok(response);
     }
 }

@@ -31,6 +31,15 @@ public class Child {
     
     @Column(name = "country")
     private String country;
+
+    @Column(name = "region_country_code", length = 2)
+    private String regionCountryCode;
+
+    @Column(name = "region_state_code", length = 10)
+    private String regionStateCode;
+
+    @Column(name = "guardian_authority_revoked", nullable = false)
+    private boolean guardianAuthorityRevoked;
     
     @Column(name = "status", nullable = false)
     private String status;
@@ -103,6 +112,30 @@ public class Child {
     
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getRegionCountryCode() {
+        return regionCountryCode;
+    }
+
+    public void setRegionCountryCode(String regionCountryCode) {
+        this.regionCountryCode = regionCountryCode;
+    }
+
+    public String getRegionStateCode() {
+        return regionStateCode;
+    }
+
+    public void setRegionStateCode(String regionStateCode) {
+        this.regionStateCode = regionStateCode;
+    }
+
+    public boolean isGuardianAuthorityRevoked() {
+        return guardianAuthorityRevoked;
+    }
+
+    public void setGuardianAuthorityRevoked(boolean guardianAuthorityRevoked) {
+        this.guardianAuthorityRevoked = guardianAuthorityRevoked;
     }
     
     public Map<String, Object> getMetadata() {

@@ -3,7 +3,11 @@ package com.regulyn.nominee.controller;
 import com.regulyn.nominee.dto.RegisterNomineeRequest;
 import com.regulyn.nominee.dto.NomineeResponse;
 import com.regulyn.nominee.dto.VerifyNomineeRequest;
+import com.regulyn.nominee.dto.VerifyNomineeRejectRequest;
+import com.regulyn.nominee.dto.NomineeVerificationExceptionRequest;
+import com.regulyn.nominee.dto.NomineeDocumentResponse;
 import com.regulyn.nominee.service.NomineeService;
+import com.regulyn.nominee.service.NomineeDocumentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +22,12 @@ import java.util.UUID;
 public class NomineeController {
 
     private final NomineeService nomineeService;
+    private final NomineeDocumentService nomineeDocumentService;
 
-    public NomineeController(NomineeService nomineeService) {
+    public NomineeController(NomineeService nomineeService,
+                             NomineeDocumentService nomineeDocumentService) {
         this.nomineeService = nomineeService;
+        this.nomineeDocumentService = nomineeDocumentService;
     }
 
     @PostMapping
@@ -37,9 +44,44 @@ public class NomineeController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<NomineeResponse> verifyNominee(
             @PathVariable("id") UUID nomineeId,
+            @RequestHeader(value = "X-User-ID", required = false) UUID userId,
             @Valid @RequestBody VerifyNomineeRequest request) {
-        NomineeResponse response = nomineeService.verifyNominee(nomineeId, request);
+        NomineeResponse response = nomineeService.verifyNominee(nomineeId, userId, request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/verify/reject")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<NomineeResponse> rejectNominee(
+            @PathVariable("id") UUID nomineeId,
+            @RequestHeader("X-User-ID") UUID userId,
+            @Valid @RequestBody VerifyNomineeRejectRequest request) {
+        NomineeResponse response = nomineeService.rejectNominee(nomineeId, userId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/verify/exception")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<NomineeDocumentResponse> recordVerificationException(
+            @RequestHeader("X-Tenant-ID") UUID tenantId,
+            @PathVariable("id") UUID nomineeId,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody NomineeVerificationExceptionRequest request) {
+        NomineeDocumentResponse response = nomineeDocumentService.registerVerificationException(
+                tenantId,
+                nomineeId,
+                request.getApprovedBy(),
+                request.getExceptionReason(),
+                request.getNotes(),
+                request.getArtifactRef(),
+                request.getSha256Hash(),
+                request.getFilename(),
+                request.getContentType(),
+                request.getSizeBytes(),
+                request.getClaimId(),
+                idempotencyKey
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @DeleteMapping("/{id}")

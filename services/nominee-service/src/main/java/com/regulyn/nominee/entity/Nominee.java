@@ -36,6 +36,7 @@ public class Nominee {
     @Column(name = "verified_at")
     private Instant verifiedAt;
 
+
     @Column(name = "relationship")
     private String relationship;
 
@@ -89,6 +90,7 @@ public class Nominee {
 
     public Instant getVerifiedAt() { return verifiedAt; }
     public void setVerifiedAt(Instant verifiedAt) { this.verifiedAt = verifiedAt; }
+
 
     public String getRelationship() { return relationship; }
     public void setRelationship(String relationship) { this.relationship = relationship; }

@@ -110,8 +110,8 @@ public class NomineeServiceIntegrationTest extends BaseIntegrationTest {
 
         // Verify first
         mockMvc.perform(post("/nominees/" + nomineeId + "/verify")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"method\": \"DOC_CHECK\"}"))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"method\": \"EMAIL_OTP\"}"))
             .andExpect(status().isOk());
 
         // Now disable

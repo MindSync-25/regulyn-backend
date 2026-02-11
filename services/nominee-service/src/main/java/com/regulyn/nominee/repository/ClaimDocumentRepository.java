@@ -13,4 +13,6 @@ public interface ClaimDocumentRepository extends JpaRepository<ClaimDocument, UU
     List<ClaimDocument> findByClaimId(UUID claimId);
 
     List<ClaimDocument> findByClaimIdAndDocType(UUID claimId, String docType);
+
+    List<ClaimDocument> findByClaimIdAndNomineeDocumentId(UUID claimId, UUID nomineeDocumentId);
 }

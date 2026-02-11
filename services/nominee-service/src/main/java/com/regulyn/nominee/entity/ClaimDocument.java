@@ -30,6 +30,9 @@ public class ClaimDocument {
     @Column(name = "uploaded_by")
     private UUID uploadedBy;
 
+    @Column(name = "nominee_document_id")
+    private UUID nomineeDocumentId;
+
     @Column(name = "metadata")
     @JdbcTypeCode(SqlTypes.JSON)
     private String metadata = "{}";
@@ -62,6 +65,9 @@ public class ClaimDocument {
 
     public UUID getUploadedBy() { return uploadedBy; }
     public void setUploadedBy(UUID uploadedBy) { this.uploadedBy = uploadedBy; }
+
+    public UUID getNomineeDocumentId() { return nomineeDocumentId; }
+    public void setNomineeDocumentId(UUID nomineeDocumentId) { this.nomineeDocumentId = nomineeDocumentId; }
 
     public String getMetadata() { return metadata; }
     public void setMetadata(String metadata) { this.metadata = metadata; }

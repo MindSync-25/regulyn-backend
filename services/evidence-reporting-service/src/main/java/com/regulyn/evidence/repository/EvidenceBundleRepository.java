@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 @Repository
 public interface EvidenceBundleRepository extends JpaRepository<EvidenceBundle, UUID> {
     
@@ -20,4 +23,6 @@ public interface EvidenceBundleRepository extends JpaRepository<EvidenceBundle, 
     );
     
     List<EvidenceBundle> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
+
+    Page<EvidenceBundle> findByTenantId(UUID tenantId, Pageable pageable);
 }

@@ -107,6 +107,7 @@ public class AuthService {
         return new LoginResponse(
             token,
             user.getTenantId().toString(),
+            tenant.getName(),
             user.getUserId().toString(),
             user.getEmail(),
             roleNames.stream().collect(Collectors.toSet())

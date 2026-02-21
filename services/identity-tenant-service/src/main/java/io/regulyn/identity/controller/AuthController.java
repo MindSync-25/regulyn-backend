@@ -4,8 +4,10 @@ import com.regulyn.auth.context.TenantContextHolder;
 import io.regulyn.identity.dto.LoginRequest;
 import io.regulyn.identity.dto.LoginResponse;
 import io.regulyn.identity.service.AuthService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -28,6 +30,11 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me() {
         var context = TenantContextHolder.getContext();
+
+        if (context == null || context.getUserId() == null || context.getTenantId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED");
+        }
+
         return ResponseEntity.ok(Map.of(
             "tenantId", context.getTenantId(),
             "userId", context.getUserId(),

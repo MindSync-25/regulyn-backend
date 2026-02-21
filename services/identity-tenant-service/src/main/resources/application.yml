@@ -36,3 +36,7 @@ invite:
 api:
   key:
     hmac-secret: ${API_KEY_HMAC_SECRET:change-me-in-production}
+
+evidence:
+  service:
+    url: ${EVIDENCE_SERVICE_URL:http://localhost:8095}

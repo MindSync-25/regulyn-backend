@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/users")
 public class UserController {
@@ -15,6 +17,13 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    public ResponseEntity<List<UserResponse>> listUsers(@RequestParam(value = "email", required = false) String email) {
+        List<UserResponse> users = userService.listUsers(email);
+        return ResponseEntity.ok(users);
     }
 
     @PostMapping

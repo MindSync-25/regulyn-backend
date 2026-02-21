@@ -14,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -72,6 +74,38 @@ public class UserService {
         response.setLastName(user.getLastName());
         response.setEnabled(user.getEnabled());
 
+        return response;
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserResponse> listUsers(String emailFilter) {
+        var context = TenantContextHolder.getContext();
+        UUID tenantId = context.getTenantId();
+
+        List<User> users;
+        if (emailFilter != null && !emailFilter.isBlank()) {
+            // Search by email (case-insensitive partial match)
+            users = userRepository.findByTenantId(tenantId).stream()
+                .filter(u -> u.getEmail().toLowerCase().contains(emailFilter.toLowerCase()))
+                .collect(Collectors.toList());
+        } else {
+            // List all users for tenant
+            users = userRepository.findByTenantId(tenantId);
+        }
+
+        return users.stream()
+            .map(this::toUserResponse)
+            .collect(Collectors.toList());
+    }
+
+    private UserResponse toUserResponse(User user) {
+        UserResponse response = new UserResponse();
+        response.setUserId(user.getUserId().toString());
+        response.setTenantId(user.getTenantId().toString());
+        response.setEmail(user.getEmail());
+        response.setFirstName(user.getFirstName());
+        response.setLastName(user.getLastName());
+        response.setEnabled(user.getEnabled());
         return response;
     }
 }

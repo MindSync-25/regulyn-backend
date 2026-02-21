@@ -1,6 +1,13 @@
 spring:
   application:
     name: dsar-grievance-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/regulyn}
+    username: ${DB_USERNAME:regulyn}
+    password: ${DB_PASSWORD:regulyn_dev_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-init-sql: SET search_path TO dsar
   jpa:
     hibernate:
       ddl-auto: validate
@@ -14,18 +21,14 @@ spring:
     enabled: true
     baseline-on-migrate: true
     schemas: dsar
-  datasource:
-    hikari:
-      connection-init-sql: SET search_path TO dsar
-
-server:
-  port: 8084
-
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics
+
+server:
+  port: ${SERVER_PORT:8084}
 
 evidence:
   service:

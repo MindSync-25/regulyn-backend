@@ -67,7 +67,7 @@ public class ExportService {
             for (EvidenceBundleItem item : items) {
                 if ("EVIDENCE".equals(item.getItemType())) {
                     EvidenceRecord evidence = evidenceRecordRepository
-                            .findByEvidenceIdAndTenantId(item.getEvidenceId().toString(), bundle.getTenantId())
+                            .findByEvidencePkAndTenantId(item.getEvidenceId(), bundle.getTenantId())
                             .orElseThrow();
 
                     // Create evidence/<evidenceId>.json
@@ -110,7 +110,7 @@ public class ExportService {
         Path exportPath = tenantDir.resolve(exportId + ".zip");
         Files.write(exportPath, zipBytes);
         
-        return exportPath.toString();
+        return exportPath.toAbsolutePath().toString();
     }
 
     public byte[] readExport(UUID tenantId, UUID exportId) throws Exception {

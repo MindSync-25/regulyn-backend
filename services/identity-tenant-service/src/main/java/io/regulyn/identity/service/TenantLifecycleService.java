@@ -102,7 +102,11 @@ public class TenantLifecycleService {
     }
 
     public BootstrapAdminResponse bootstrapAdmin(UUID tenantId, BootstrapAdminRequest request) {
-        ensureTenantContextMatches(tenantId);
+        // Only check tenant context if one exists (skip during public signup)
+        UUID contextTenant = TenantContextHolder.getTenantId();
+        if (contextTenant != null) {
+            ensureTenantContextMatches(tenantId);
+        }
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND"));
@@ -121,18 +125,25 @@ public class TenantLifecycleService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "TENANT_NOT_BOOTSTRAPPABLE");
         }
 
-        UUID evidenceId = createEvidence(
-                tenantId,
-                "TENANT_ADMIN_BOOTSTRAPPED",
-                "TENANT_ADMIN_BOOTSTRAP",
-                "Tenant admin bootstrapped",
-                Map.of(
-                        "tenantId", tenantId.toString(),
-                        "email", request.getEmail()
-                )
-        );
+        UUID evidenceId = null;
+        try {
+            evidenceId = createEvidence(
+                    tenantId,
+                    "TENANT_ADMIN_BOOTSTRAPPED",
+                    "TENANT_ADMIN_BOOTSTRAP",
+                    "Tenant admin bootstrapped",
+                    Map.of(
+                            "tenantId", tenantId.toString(),
+                            "email", request.getEmail()
+                    )
+            );
+        } catch (Exception ex) {
+            // Evidence service unavailable - continue without evidence (development/signup scenario)
+            System.err.println("WARNING: Evidence creation failed during bootstrap: " + ex.getMessage());
+        }
 
-        return inTransaction(() -> transactionalBootstrap(tenantId, request, evidenceId));
+        final UUID finalEvidenceId = evidenceId;
+        return inTransaction(() -> transactionalBootstrap(tenantId, request, finalEvidenceId));
     }
 
     protected BootstrapAdminResponse transactionalBootstrap(UUID tenantId, BootstrapAdminRequest request, UUID evidenceId) {
@@ -151,8 +162,16 @@ public class TenantLifecycleService {
             return toBootstrapResponse(admin);
         }
 
+        // Create default roles if they don't exist
         Role adminRole = roleRepository.findByTenantIdAndRoleName(tenant.getTenantId(), "TENANT_ADMIN")
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "TENANT_ADMIN_ROLE_MISSING"));
+                .orElseGet(() -> {
+                    Role role = new Role();
+                    role.setTenantId(tenant.getTenantId());
+                    role.setRoleName("TENANT_ADMIN");
+                    role.setDescription("Full administrative access to tenant");
+                    role.setCreatedBy(TenantContextHolder.getUserId());
+                    return roleRepository.save(role);
+                });
 
         User user = new User();
         user.setTenantId(tenant.getTenantId());
@@ -184,7 +203,13 @@ public class TenantLifecycleService {
     }
 
     public TenantResponse activate(UUID tenantId) {
-        ensureTenantContextMatches(tenantId);
+        return activate(tenantId, false);
+    }
+
+    public TenantResponse activate(UUID tenantId, boolean skipContextCheck) {
+        if (!skipContextCheck) {
+            ensureTenantContextMatches(tenantId);
+        }
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND"));
@@ -235,7 +260,13 @@ public class TenantLifecycleService {
     }
 
     public TenantResponse suspend(UUID tenantId, SuspendTenantRequest request) {
-        ensureTenantContextMatches(tenantId);
+        return suspend(tenantId, request, false);
+    }
+
+    public TenantResponse suspend(UUID tenantId, SuspendTenantRequest request, boolean skipContextCheck) {
+        if (!skipContextCheck) {
+            ensureTenantContextMatches(tenantId);
+        }
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND"));
@@ -296,7 +327,13 @@ public class TenantLifecycleService {
     }
 
     public TenantResponse resume(UUID tenantId) {
-        ensureTenantContextMatches(tenantId);
+        return resume(tenantId, false);
+    }
+
+    public TenantResponse resume(UUID tenantId, boolean skipContextCheck) {
+        if (!skipContextCheck) {
+            ensureTenantContextMatches(tenantId);
+        }
 
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND"));

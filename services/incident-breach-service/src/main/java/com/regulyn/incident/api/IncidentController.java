@@ -94,10 +94,10 @@ public class IncidentController {
     
     @GetMapping
     public ResponseEntity<Page<IncidentDetailsResponse>> listIncidents(
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String severity,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "severity", required = false) String severity,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "openedAt"));
         Page<IncidentDetailsResponse> response = incidentService.listIncidents(status, severity, pageable);
         return ResponseEntity.ok(response);

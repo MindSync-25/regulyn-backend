@@ -29,7 +29,7 @@ audit:
 # Evidence service integration and storage
 evidence:
   service:
-    url: http://localhost:8083
+    url: ${EVIDENCE_SERVICE_URL:http://localhost:8095}
   storage:
     localDir: ./data/deletion-proofs
 
@@ -41,7 +41,7 @@ retention:
 
 connector:
   service:
-    url: http://localhost:8084
+    url: ${CONNECTOR_SERVICE_URL:http://localhost:8093}
 
 deletion:
   cascade:

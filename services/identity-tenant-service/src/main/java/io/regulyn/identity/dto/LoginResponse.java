@@ -5,15 +5,17 @@ import java.util.Set;
 public class LoginResponse {
     private String token;
     private String tenantId;
+    private String tenantName;
     private String userId;
     private String email;
     private Set<String> roles;
 
     public LoginResponse() {}
 
-    public LoginResponse(String token, String tenantId, String userId, String email, Set<String> roles) {
+    public LoginResponse(String token, String tenantId, String tenantName, String userId, String email, Set<String> roles) {
         this.token = token;
         this.tenantId = tenantId;
+        this.tenantName = tenantName;
         this.userId = userId;
         this.email = email;
         this.roles = roles;
@@ -33,6 +35,14 @@ public class LoginResponse {
 
     public void setTenantId(String tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public String getTenantName() {
+        return tenantName;
+    }
+
+    public void setTenantName(String tenantName) {
+        this.tenantName = tenantName;
     }
 
     public String getUserId() {

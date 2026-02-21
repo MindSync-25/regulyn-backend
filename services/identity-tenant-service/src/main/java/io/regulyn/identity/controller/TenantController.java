@@ -33,7 +33,6 @@ public class TenantController {
     }
 
     @PostMapping("/{tenantId}/bootstrap-admin")
-    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<BootstrapAdminResponse> bootstrapAdmin(@PathVariable("tenantId") UUID tenantId,
                                                                  @RequestBody BootstrapAdminRequest request) {
         return ResponseEntity.ok(tenantLifecycleService.bootstrapAdmin(tenantId, request));

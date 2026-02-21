@@ -26,7 +26,7 @@ regulyn:
     otel:
       enabled: false
   evidence:
-    baseUrl: ${EVIDENCE_SERVICE_URL:http://localhost:8083}
+    baseUrl: ${EVIDENCE_SERVICE_URL:http://localhost:8095}
 
 connector:
   credentials:

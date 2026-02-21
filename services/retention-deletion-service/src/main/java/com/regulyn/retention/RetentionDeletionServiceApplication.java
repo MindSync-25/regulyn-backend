@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
-@ComponentScan(basePackages = {"com.regulyn.retention", "com.regulyn.common", "com.regulyn.events", "com.regulyn.evidence"})
+@ComponentScan(basePackages = {"com.regulyn.retention", "com.regulyn.auth", "com.regulyn.common", "com.regulyn.events", "com.regulyn.evidence"})
 @EnableJpaRepositories(basePackages = {"com.regulyn.retention", "com.regulyn.events.outbox", "com.regulyn.common.audit"})
 @EntityScan(basePackages = {"com.regulyn.retention", "com.regulyn.events.outbox", "com.regulyn.common.audit"})
 public class RetentionDeletionServiceApplication {

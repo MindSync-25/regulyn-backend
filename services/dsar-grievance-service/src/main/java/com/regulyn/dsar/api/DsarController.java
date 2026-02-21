@@ -59,11 +59,11 @@ public class DsarController {
   
   @GetMapping
   public Page<DsarDetailResponse> searchDsars(
-      @RequestParam(required = false) String status,
-      @RequestParam(required = false) String requestType,
-      @RequestParam(required = false) UUID dataPrincipalId,
-      @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "20") int size) {
+      @RequestParam(name = "status", required = false) String status,
+      @RequestParam(name = "requestType", required = false) String requestType,
+      @RequestParam(name = "dataPrincipalId", required = false) UUID dataPrincipalId,
+      @RequestParam(name = "page", defaultValue = "0") int page,
+      @RequestParam(name = "size", defaultValue = "20") int size) {
     return dsarWorkflowService.searchDsars(status, requestType, dataPrincipalId, page, size);
   }
 }

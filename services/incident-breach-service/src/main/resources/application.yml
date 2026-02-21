@@ -1,6 +1,13 @@
 spring:
   application:
     name: incident-breach-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/regulyn}
+    username: ${DB_USERNAME:regulyn}
+    password: ${DB_PASSWORD:regulyn_dev_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-init-sql: SET search_path TO incident
   jpa:
     hibernate:
       ddl-auto: validate
@@ -38,7 +45,7 @@ server:
 
 evidence:
   service:
-    url: ${EVIDENCE_SERVICE_URL:http://localhost:8086}
+    url: ${EVIDENCE_SERVICE_URL:http://localhost:8095}
 
 notification:
   service:

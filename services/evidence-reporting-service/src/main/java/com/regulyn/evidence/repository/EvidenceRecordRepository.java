@@ -10,4 +10,5 @@ import java.util.UUID;
 @Repository
 public interface EvidenceRecordRepository extends JpaRepository<EvidenceRecord, UUID> {
     Optional<EvidenceRecord> findByEvidenceIdAndTenantId(String evidenceId, UUID tenantId);
+    Optional<EvidenceRecord> findByEvidencePkAndTenantId(UUID evidencePk, UUID tenantId);
 }

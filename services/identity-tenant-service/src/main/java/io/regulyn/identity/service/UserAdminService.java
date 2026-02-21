@@ -65,7 +65,7 @@ public class UserAdminService {
         if (tenantId == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "TENANT_CONTEXT_REQUIRED");
         }
-        ensureTenantActive(tenantId);
+        // Note: No tenant status check - lock/unlock should work regardless of tenant status
 
         return transactionTemplate.execute(status -> {
             User user = userRepository.findByIdForUpdate(userId)
@@ -76,6 +76,11 @@ public class UserAdminService {
             }
 
             if (user.getLockedAt() != null) {
+                // Keep enabled flag consistent with locked state
+                if (Boolean.TRUE.equals(user.getEnabled())) {
+                    user.setEnabled(false);
+                    userRepository.save(user);
+                }
                 LockUserResponse response = new LockUserResponse();
                 response.setUserId(user.getUserId());
                 response.setLockedAt(user.getLockedAt());
@@ -99,6 +104,8 @@ public class UserAdminService {
             user.setLockedAt(lockedAt);
             user.setLockedReason(reason);
             user.setLockedByUserId(TenantContextHolder.getUserId());
+            // Disable login when locked
+            user.setEnabled(false);
             userRepository.save(user);
 
             writeAuditOutboxLock(user, null, lockedAt, reason, evidenceId);
@@ -116,7 +123,7 @@ public class UserAdminService {
         if (tenantId == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "TENANT_CONTEXT_REQUIRED");
         }
-        ensureTenantActive(tenantId);
+        // Note: No tenant status check - lock/unlock should work regardless of tenant status
 
         return transactionTemplate.execute(status -> {
             User user = userRepository.findByIdForUpdate(userId)
@@ -127,6 +134,15 @@ public class UserAdminService {
             }
 
             if (user.getLockedAt() == null) {
+                // Ensure enabled flag is consistent with unlocked state
+                if (!Boolean.TRUE.equals(user.getEnabled())) {
+                    user.setEnabled(true);
+                    userRepository.save(user);
+                    UnlockUserResponse response = new UnlockUserResponse();
+                    response.setUserId(user.getUserId());
+                    response.setUnlockedAt(Instant.now());
+                    return response;
+                }
                 UnlockUserResponse response = new UnlockUserResponse();
                 response.setUserId(user.getUserId());
                 response.setUnlockedAt(null);
@@ -150,6 +166,8 @@ public class UserAdminService {
             user.setLockedAt(null);
             user.setLockedReason(null);
             user.setLockedByUserId(null);
+            // Re-enable login when unlocked
+            user.setEnabled(true);
             userRepository.save(user);
 
             writeAuditOutboxUnlock(user, previousLockedAt, reason, evidenceId);
@@ -164,7 +182,11 @@ public class UserAdminService {
     private void ensureTenantActive(UUID tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "TENANT_NOT_FOUND"));
-        if (!TenantStatuses.ACTIVE.equals(tenant.getStatus())) {
+        // Allow lock/unlock operations for ACTIVE and SUSPENDED tenants (but not DELETED or DRAFT)
+        if (TenantStatuses.DELETED.equals(tenant.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "TENANT_DELETED");
+        }
+        if (TenantStatuses.DRAFT.equals(tenant.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "TENANT_NOT_ACTIVE");
         }
     }

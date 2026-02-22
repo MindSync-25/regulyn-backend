@@ -25,7 +25,8 @@ public class PreferenceController {
     }
     
     @GetMapping("/{dataPrincipalId}")
-    public ResponseEntity<GetPreferencesResponse> getPreferences(@PathVariable String dataPrincipalId) {
+    public ResponseEntity<GetPreferencesResponse> getPreferences(
+            @PathVariable("dataPrincipalId") String dataPrincipalId) {
         GetPreferencesResponse response = preferenceService.getPreferences(dataPrincipalId);
         return ResponseEntity.ok(response);
     }

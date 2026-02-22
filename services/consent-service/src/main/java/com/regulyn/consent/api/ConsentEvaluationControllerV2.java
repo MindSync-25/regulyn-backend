@@ -20,9 +20,9 @@ public class ConsentEvaluationControllerV2 {
 
     @GetMapping("/consents/valid")
     public ResponseEntity<ConsentValidityResponse> validateConsent(
-            @RequestParam UUID dataPrincipalId,
-            @RequestParam String purpose,
-            @RequestParam UUID requiredPurposeVersionId) {
+            @RequestParam("dataPrincipalId") UUID dataPrincipalId,
+            @RequestParam("purpose") String purpose,
+            @RequestParam("requiredPurposeVersionId") UUID requiredPurposeVersionId) {
         return ResponseEntity.ok(
             consentEvaluationService.validateConsent(dataPrincipalId, purpose, requiredPurposeVersionId)
         );
@@ -30,8 +30,8 @@ public class ConsentEvaluationControllerV2 {
 
     @GetMapping("/notices/{noticeId}/purposes/{purposeKey}/active-version")
     public ResponseEntity<ActivePurposeVersionResponse> getActivePurposeVersion(
-            @PathVariable UUID noticeId,
-            @PathVariable String purposeKey) {
+            @PathVariable("noticeId") UUID noticeId,
+            @PathVariable("purposeKey") String purposeKey) {
         ActivePurposeVersionResponse response = consentEvaluationService.getActivePurposeVersion(noticeId, purposeKey);
         if (response == null) {
             return ResponseEntity.notFound().build();

@@ -25,7 +25,7 @@ public class CommunicationConsentControllerV2 {
 
     @PostMapping("/channels/{channel}/opt-in")
     public ResponseEntity<CommunicationConsentResponse> optIn(
-            @PathVariable String channel,
+            @PathVariable("channel") String channel,
             @RequestBody CommunicationConsentRequest request) {
         return ResponseEntity.ok(
                 communicationConsentService.recordOptIn(parseChannel(channel), request)
@@ -34,7 +34,7 @@ public class CommunicationConsentControllerV2 {
 
     @PostMapping("/channels/{channel}/opt-out")
     public ResponseEntity<CommunicationConsentResponse> optOut(
-            @PathVariable String channel,
+            @PathVariable("channel") String channel,
             @RequestBody CommunicationConsentRequest request) {
         return ResponseEntity.ok(
                 communicationConsentService.recordOptOut(parseChannel(channel), request)
@@ -43,8 +43,8 @@ public class CommunicationConsentControllerV2 {
 
     @GetMapping("/channels/{channel}/status")
     public ResponseEntity<CommunicationConsentStatusResponse> getStatus(
-            @PathVariable String channel,
-            @RequestParam UUID dataPrincipalId) {
+            @PathVariable("channel") String channel,
+            @RequestParam("dataPrincipalId") UUID dataPrincipalId) {
         return ResponseEntity.ok(
                 communicationConsentService.getStatus(parseChannel(channel), dataPrincipalId)
         );

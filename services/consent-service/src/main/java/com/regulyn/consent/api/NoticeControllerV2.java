@@ -20,6 +20,11 @@ public class NoticeControllerV2 {
         this.noticeManagementService = noticeManagementService;
     }
     
+    @GetMapping("/notices")
+    public ResponseEntity<List<NoticeListItemDto>> listNotices() {
+        return ResponseEntity.ok(noticeManagementService.listNotices());
+    }
+
     @PostMapping("/notices")
     public ResponseEntity<CreateNoticeResponse> createNotice(@Valid @RequestBody CreateNoticeRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -28,7 +33,7 @@ public class NoticeControllerV2 {
     
     @PostMapping("/notices/{noticeId}/versions")
     public ResponseEntity<CreateVersionResponse> createVersion(
-            @PathVariable UUID noticeId,
+            @PathVariable("noticeId") UUID noticeId,
             @Valid @RequestBody CreateVersionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(noticeManagementService.createVersion(noticeId, request));
@@ -36,8 +41,8 @@ public class NoticeControllerV2 {
     
     @PostMapping("/notices/{noticeId}/versions/{versionId}/languages")
     public ResponseEntity<AddLanguageResponse> addLanguage(
-            @PathVariable UUID noticeId,
-            @PathVariable UUID versionId,
+            @PathVariable("noticeId") UUID noticeId,
+            @PathVariable("versionId") UUID versionId,
             @Valid @RequestBody AddLanguageRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(noticeManagementService.addLanguage(noticeId, versionId, request));
@@ -45,24 +50,34 @@ public class NoticeControllerV2 {
     
     @PostMapping("/notices/{noticeId}/versions/{versionId}/publish")
     public ResponseEntity<PublishVersionResponse> publishVersion(
-            @PathVariable UUID noticeId,
-            @PathVariable UUID versionId,
+            @PathVariable("noticeId") UUID noticeId,
+            @PathVariable("versionId") UUID versionId,
             @RequestBody(required = false) PublishVersionRequest request) {
         return ResponseEntity.ok(noticeManagementService.publishVersion(noticeId, versionId, request));
     }
     
     @GetMapping("/notices/active")
     public ResponseEntity<ActiveNoticeResponse> getActiveNotice(
-            @RequestParam String purpose,
-            @RequestParam(defaultValue = "en") String language) {
+            @RequestParam("purpose") String purpose,
+            @RequestParam(name = "language", defaultValue = "en") String language) {
         return ResponseEntity.ok(noticeManagementService.getActiveNotice(purpose, language));
     }
 
     @GetMapping("/notices/active-dual")
     public ResponseEntity<ActiveDualNoticeResponse> getActiveNoticeDual(
-            @RequestParam String purpose,
-            @RequestParam String region) {
+            @RequestParam("purpose") String purpose,
+            @RequestParam("region") String region) {
         return ResponseEntity.ok(noticeManagementService.getActiveNoticeDual(purpose, region));
+    }
+
+    @GetMapping("/admin/purposes")
+    public ResponseEntity<List<PurposeVersionListItemDto>> listPurposeVersions() {
+        return ResponseEntity.ok(noticeManagementService.listPurposeVersions());
+    }
+
+    @GetMapping("/admin/reconsent")
+    public ResponseEntity<List<ReconsentRequirementListItemDto>> listReconsentRequirements() {
+        return ResponseEntity.ok(noticeManagementService.listReconsentRequirements());
     }
     
     @PostMapping("/consents")
@@ -73,15 +88,15 @@ public class NoticeControllerV2 {
     
     @PostMapping("/consents/{receiptId}/withdraw")
     public ResponseEntity<WithdrawConsentResponse> withdrawConsent(
-            @PathVariable UUID receiptId,
+            @PathVariable("receiptId") UUID receiptId,
             @Valid @RequestBody WithdrawConsentRequest request) {
         return ResponseEntity.ok(noticeManagementService.withdrawConsent(receiptId, request));
     }
     
     @GetMapping("/consents")
     public ResponseEntity<List<ConsentReceiptDto>> listConsents(
-            @RequestParam UUID dataPrincipalId,
-            @RequestParam(required = false) String purpose) {
+            @RequestParam("dataPrincipalId") UUID dataPrincipalId,
+            @RequestParam(name = "purpose", required = false) String purpose) {
         return ResponseEntity.ok(noticeManagementService.listConsents(dataPrincipalId, purpose));
     }
 }

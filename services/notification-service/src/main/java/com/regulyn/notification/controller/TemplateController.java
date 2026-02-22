@@ -27,7 +27,7 @@ public class TemplateController {
     
     @PostMapping("/{templateId}/versions")
     public ResponseEntity<CreateVersionResponse> createVersion(
-        @PathVariable UUID templateId,
+        @PathVariable("templateId") UUID templateId,
         @Valid @RequestBody CreateVersionRequest request
     ) {
         CreateVersionResponse response = templateService.createVersion(templateId, request);
@@ -36,7 +36,7 @@ public class TemplateController {
     
     @PostMapping("/versions/{versionId}/languages")
     public ResponseEntity<AddLanguageResponse> addLanguage(
-        @PathVariable UUID versionId,
+        @PathVariable("versionId") UUID versionId,
         @Valid @RequestBody AddLanguageRequest request
     ) {
         AddLanguageResponse response = templateService.addLanguage(versionId, request);
@@ -45,7 +45,7 @@ public class TemplateController {
     
     @PostMapping("/versions/{versionId}/publish")
     public ResponseEntity<PublishResponse> publishVersion(
-        @PathVariable UUID versionId,
+        @PathVariable("versionId") UUID versionId,
         @RequestBody PublishRequest request
     ) {
         PublishResponse response = templateService.publishVersion(versionId, request);
@@ -54,8 +54,8 @@ public class TemplateController {
     
     @GetMapping("/{templateKey}")
     public ResponseEntity<GetActiveTemplateResponse> getActiveTemplate(
-        @PathVariable String templateKey,
-        @RequestParam(defaultValue = "en") String language
+        @PathVariable("templateKey") String templateKey,
+        @RequestParam(name = "language", defaultValue = "en") String language
     ) {
         GetActiveTemplateResponse response = templateService.getActiveTemplate(templateKey, language);
         return ResponseEntity.ok(response);

@@ -954,6 +954,100 @@ public class NoticeManagementService {
             .collect(Collectors.toList());
     }
     
+    @Transactional(readOnly = true)
+    public List<NoticeListItemDto> listNotices() {
+        UUID tenantId = TenantContextHolder.getTenantId();
+        List<NoticeTemplate> templates = noticeTemplateRepository.findAllByTenantIdOrderByCreatedAtDesc(tenantId);
+        return templates.stream()
+            .map(t -> {
+                Optional<NoticeVersion> latestVersion = noticeVersionRepository
+                    .findTopByTenantIdAndNoticeIdOrderByVersionNumberDesc(tenantId, t.getNoticeId());
+                return new NoticeListItemDto(
+                    t.getNoticeId(),
+                    t.getPurpose(),
+                    t.getTitle(),
+                    t.getCategory(),
+                    t.getDefaultLanguage(),
+                    t.getCreatedAt(),
+                    latestVersion.map(NoticeVersion::getStatus).orElse(null),
+                    latestVersion.map(NoticeVersion::getVersionId).orElse(null),
+                    latestVersion.map(NoticeVersion::getVersionNumber).orElse(null)
+                );
+            })
+            .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PurposeVersionListItemDto> listPurposeVersions() {
+        UUID tenantId = TenantContextHolder.getTenantId();
+        return purposeVersionRepository
+            .findByTenantIdOrderByPurposeKeyAscVersionNumDesc(tenantId)
+            .stream()
+            .map(pv -> {
+                String legalBasis = null;
+                Integer retentionDays = null;
+                List<String> dataCategories = List.of();
+                List<String> dataFields = List.of();
+                List<String> processingActivities = List.of();
+                try {
+                    com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(pv.getScopeJson());
+                    if (node.has("legalBasis") && !node.get("legalBasis").isNull()) {
+                        legalBasis = node.get("legalBasis").asText();
+                    }
+                    if (node.has("retentionDays") && !node.get("retentionDays").isNull()) {
+                        retentionDays = node.get("retentionDays").asInt();
+                    }
+                    if (node.has("dataCategories") && node.get("dataCategories").isArray()) {
+                        dataCategories = objectMapper.convertValue(node.get("dataCategories"),
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+                    }
+                    if (node.has("dataFields") && node.get("dataFields").isArray()) {
+                        dataFields = objectMapper.convertValue(node.get("dataFields"),
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+                    }
+                    if (node.has("processingActivities") && node.get("processingActivities").isArray()) {
+                        processingActivities = objectMapper.convertValue(node.get("processingActivities"),
+                            objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+                    }
+                } catch (Exception ignored) {}
+                return new PurposeVersionListItemDto(
+                    pv.getId(),
+                    pv.getPurposeKey(),
+                    pv.getVersionNum(),
+                    pv.getScopeHashSha256(),
+                    legalBasis,
+                    retentionDays,
+                    dataCategories,
+                    dataFields,
+                    processingActivities,
+                    pv.getNoticeId(),
+                    pv.getNoticeVersionId(),
+                    pv.getCreatedAt()
+                );
+            })
+            .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReconsentRequirementListItemDto> listReconsentRequirements() {
+        UUID tenantId = TenantContextHolder.getTenantId();
+        return reconsentRequirementRepository
+            .findByTenantIdOrderByCreatedAtDesc(tenantId)
+            .stream()
+            .map(r -> new ReconsentRequirementListItemDto(
+                r.getId(),
+                r.getDataPrincipalId(),
+                r.getPurposeKey(),
+                r.getNoticeId(),
+                r.getRequiredPurposeVersionId(),
+                r.getStatus() != null ? r.getStatus().name() : null,
+                r.getCreatedAt(),
+                r.getSatisfiedAt(),
+                r.getSatisfiedByConsentReceiptId()
+            ))
+            .collect(Collectors.toList());
+    }
+
     private String computeSHA256(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

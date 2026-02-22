@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
-@ComponentScan(basePackages = {"com.regulyn.consent", "com.regulyn.common"})
+@ComponentScan(basePackages = {"com.regulyn.consent", "com.regulyn.common", "com.regulyn.auth"})
 @EntityScan(basePackages = {"com.regulyn.consent", "com.regulyn.events.outbox"})
 @EnableJpaRepositories(basePackages = {"com.regulyn.consent", "com.regulyn.events.outbox"})
 @Import(EventsAutoConfiguration.class)

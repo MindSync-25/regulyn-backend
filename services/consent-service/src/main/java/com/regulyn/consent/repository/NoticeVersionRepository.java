@@ -20,4 +20,6 @@ public interface NoticeVersionRepository extends JpaRepository<NoticeVersion, UU
     List<NoticeVersion> findByTenantIdAndNoticeIdAndStatusOrderByVersionNumberDesc(UUID tenantId, UUID noticeId, String status);
     
     Optional<NoticeVersion> findByTenantIdAndVersionId(UUID tenantId, UUID versionId);
+
+    Optional<NoticeVersion> findTopByTenantIdAndNoticeIdOrderByVersionNumberDesc(UUID tenantId, UUID noticeId);
 }

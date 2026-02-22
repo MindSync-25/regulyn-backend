@@ -6,16 +6,18 @@ import org.springframework.stereotype.Component;
 public class NoopTranslationClient implements TranslationClient {
     @Override
     public String translate(String text, String fromLanguage, String toLanguage) {
-        return null;
+        // Dev/local stub — returns the source text unchanged.
+        // In production, replace with a real translation service implementation.
+        return text;
     }
 
     @Override
     public String getEngine() {
-        return null;
+        return "noop";
     }
 
     @Override
     public String getEngineVersion() {
-        return null;
+        return "1.0";
     }
 }

@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @ComponentScan(basePackages = {
   "com.regulyn.vendor",
+  "com.regulyn.auth",
   "com.regulyn.common.audit"
 })
 @EnableScheduling

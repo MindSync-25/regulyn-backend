@@ -25,33 +25,33 @@ public class ScanRunController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
     public ResponseEntity<ScanRunResponse> createRun(@Valid @RequestBody CreateScanRunRequest request) {
         ScanRunResponse response = scanRunService.createRun(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/{runId}/execute")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
     public ResponseEntity<ScanRunResponse> executeRun(@PathVariable("runId") UUID runId) {
         ScanRunResponse response = scanRunService.executeRun(runId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{runId}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<ScanRunResponse> getRun(@PathVariable("runId") UUID runId) {
         ScanRunResponse response = scanRunService.getRun(runId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<Page<ScanRunResponse>> listRuns(
-        @RequestParam(required = false) String status,
-        @RequestParam(required = false) UUID sourceId,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(name = "status", required = false) String status,
+        @RequestParam(name = "sourceId", required = false) UUID sourceId,
+        @RequestParam(name = "page", defaultValue = "0") int page,
+        @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
         Page<ScanRunResponse> runs = scanRunService.listRuns(status, sourceId, pageable);

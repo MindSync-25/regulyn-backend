@@ -23,24 +23,24 @@ public class ScanSourceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
     public ResponseEntity<ScanSourceResponse> createSource(@Valid @RequestBody CreateScanSourceRequest request) {
         ScanSourceResponse response = scanSourceService.createSource(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<List<ScanSourceResponse>> listSources(
-        @RequestParam(required = false) String status,
-        @RequestParam(required = false) String type
+        @RequestParam(name = "status", required = false) String status,
+        @RequestParam(name = "type", required = false) String type
     ) {
         List<ScanSourceResponse> sources = scanSourceService.listSources(status, type);
         return ResponseEntity.ok(sources);
     }
 
     @PostMapping("/{sourceId}/disable")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<ScanSourceResponse> disableSource(@PathVariable("sourceId") UUID sourceId) {
         ScanSourceResponse response = scanSourceService.disableSource(sourceId);
         return ResponseEntity.ok(response);

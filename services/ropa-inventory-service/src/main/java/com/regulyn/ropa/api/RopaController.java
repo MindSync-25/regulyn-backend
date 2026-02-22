@@ -35,9 +35,9 @@ public class RopaController {
 
     @GetMapping("/systems")
     public ResponseEntity<List<RopaSystem>> listSystems(
-        @RequestParam(required = false) RopaSystem.SystemType type,
-        @RequestParam(required = false) RopaSystem.Criticality criticality,
-        @RequestParam(required = false) String q
+        @RequestParam(name = "type", required = false) RopaSystem.SystemType type,
+        @RequestParam(name = "criticality", required = false) RopaSystem.Criticality criticality,
+        @RequestParam(name = "q", required = false) String q
     ) {
         List<RopaSystem> systems = ropaService.listSystems(type, criticality, q);
         return ResponseEntity.ok(systems);
@@ -103,14 +103,14 @@ public class RopaController {
 
     @GetMapping("/activities")
     public ResponseEntity<Page<RopaActivityVersion>> listActivities(
-        @RequestParam(required = false) RopaActivityVersion.Status status,
-        @RequestParam(required = false) RopaActivityVersion.RiskLevel riskLevel,
-        @RequestParam(required = false) RopaActivityVersion.LawfulBasis lawfulBasis,
-        @RequestParam(required = false) String q,
-        @RequestParam(required = false) UUID systemId,
-        @RequestParam(required = false) UUID dataCategoryId,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(name = "status", required = false) RopaActivityVersion.Status status,
+        @RequestParam(name = "riskLevel", required = false) RopaActivityVersion.RiskLevel riskLevel,
+        @RequestParam(name = "lawfulBasis", required = false) RopaActivityVersion.LawfulBasis lawfulBasis,
+        @RequestParam(name = "q", required = false) String q,
+        @RequestParam(name = "systemId", required = false) UUID systemId,
+        @RequestParam(name = "dataCategoryId", required = false) UUID dataCategoryId,
+        @RequestParam(name = "page", defaultValue = "0") int page,
+        @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         Page<RopaActivityVersion> activities = ropaService.listActivities(
             status, riskLevel, lawfulBasis, q, systemId, dataCategoryId, page, size);

@@ -31,7 +31,7 @@ public class RemediationTaskController {
     }
 
     @PostMapping("/runs/{runId}/tasks/generate")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
     public ResponseEntity<TaskGenerationResponse> generateTasks(
         @PathVariable("runId") UUID runId,
         @RequestBody(required = false) TaskGenerationRequest request
@@ -42,14 +42,14 @@ public class RemediationTaskController {
     }
 
     @GetMapping("/tasks")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'OPERATOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<Page<RemediationTaskResponse>> listTasks(
-        @RequestParam(required = false) String status,
-        @RequestParam(required = false) UUID sourceId,
-        @RequestParam(required = false) UUID runId,
-        @RequestParam(required = false) String severity,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(name = "status", required = false) String status,
+        @RequestParam(name = "sourceId", required = false) UUID sourceId,
+        @RequestParam(name = "runId", required = false) UUID runId,
+        @RequestParam(name = "severity", required = false) String severity,
+        @RequestParam(name = "page", defaultValue = "0") int page,
+        @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         RemediationTaskEntity.Status statusEnum = status != null ? RemediationTaskEntity.Status.valueOf(status) : null;
         RemediationTaskEntity.Severity severityEnum = severity != null ? RemediationTaskEntity.Severity.valueOf(severity) : null;
@@ -59,13 +59,13 @@ public class RemediationTaskController {
     }
 
     @GetMapping("/tasks/{taskId}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'OPERATOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<RemediationTaskResponse> getTask(@PathVariable("taskId") UUID taskId) {
         return ResponseEntity.ok(taskService.getTask(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/transition")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'OPERATOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<RemediationTaskResponse> transitionTask(
         @PathVariable("taskId") UUID taskId,
         @Valid @RequestBody TaskTransitionRequest request,
@@ -77,7 +77,7 @@ public class RemediationTaskController {
     }
 
     @PostMapping("/tasks/{taskId}/events")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'OPERATOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<RemediationTaskResponse> addTaskEvent(
         @PathVariable("taskId") UUID taskId,
         @Valid @RequestBody TaskEventRequest request,

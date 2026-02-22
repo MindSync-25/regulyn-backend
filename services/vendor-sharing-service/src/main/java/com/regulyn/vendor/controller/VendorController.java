@@ -46,9 +46,9 @@ public class VendorController {
      */
     @GetMapping("/vendors")
     public ResponseEntity<List<VendorResponse>> listVendors(
-        @RequestParam(required = false) Boolean enabled,
-        @RequestParam(required = false) Vendor.RiskLevel riskLevel,
-        @RequestParam(required = false) String q
+        @RequestParam(name = "enabled", required = false) Boolean enabled,
+        @RequestParam(name = "riskLevel", required = false) Vendor.RiskLevel riskLevel,
+        @RequestParam(name = "q", required = false) String q
     ) {
         List<VendorResponse> vendors = vendorService.listVendors(enabled, riskLevel, q);
         return ResponseEntity.ok(vendors);
@@ -109,14 +109,14 @@ public class VendorController {
      */
     @GetMapping("/sharing-records")
     public ResponseEntity<Page<SharingRecordResponse>> listSharingRecords(
-        @RequestParam(required = false) UUID vendorId,
-        @RequestParam(required = false) UUID activityId,
-        @RequestParam(required = false) UUID systemId,
-        @RequestParam(required = false) Boolean enabled,
-        @RequestParam(required = false) String dataCategory,
-        @RequestParam(required = false) Boolean transferCrossBorder,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(name = "vendorId", required = false) UUID vendorId,
+        @RequestParam(name = "activityId", required = false) UUID activityId,
+        @RequestParam(name = "systemId", required = false) UUID systemId,
+        @RequestParam(name = "enabled", required = false) Boolean enabled,
+        @RequestParam(name = "dataCategory", required = false) String dataCategory,
+        @RequestParam(name = "transferCrossBorder", required = false) Boolean transferCrossBorder,
+        @RequestParam(name = "page", defaultValue = "0") int page,
+        @RequestParam(name = "size", defaultValue = "20") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
         Page<SharingRecordResponse> records = vendorService.listSharingRecords(

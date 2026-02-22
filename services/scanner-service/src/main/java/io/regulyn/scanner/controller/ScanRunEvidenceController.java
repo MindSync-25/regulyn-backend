@@ -19,7 +19,7 @@ public class ScanRunEvidenceController {
     }
 
     @PostMapping("/{runId}/evidence/bundle")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
     public ResponseEntity<RunEvidenceBundleResponse> createEvidenceBundle(
         @PathVariable("runId") UUID runId,
         @RequestHeader("X-User-ID") UUID userId,

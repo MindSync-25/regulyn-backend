@@ -23,14 +23,14 @@ public class ExportController {
     }
 
     @PostMapping("/exports/scans")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
     public ResponseEntity<ScanExportResponse> createExport(@RequestBody CreateScanExportRequest request) {
         ScanExportResponse response = exportService.createExport(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/exports/{exportId}/download")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'AUDITOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<byte[]> downloadExport(@PathVariable("exportId") UUID exportId) {
         byte[] data = exportService.downloadExport(exportId);
 

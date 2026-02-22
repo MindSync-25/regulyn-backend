@@ -21,7 +21,7 @@ public class PromotionController {
     }
 
     @PostMapping("/{runId}/promote/retention-candidates")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<PromoteRetentionCandidatesResponse> promoteRetentionCandidates(
         @PathVariable("runId") UUID runId,
         @Valid @RequestBody PromoteRetentionCandidatesRequest request

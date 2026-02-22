@@ -20,7 +20,7 @@ public class FindingController {
     }
 
     @GetMapping("/{runId}/findings")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SCANNER_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
     public ResponseEntity<List<FindingResponse>> getRunFindings(@PathVariable("runId") UUID runId) {
         List<FindingResponse> findings = findingService.getRunFindings(runId);
         return ResponseEntity.ok(findings);

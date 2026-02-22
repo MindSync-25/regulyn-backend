@@ -12,6 +12,7 @@ import io.regulyn.identity.client.EvidenceClient;
 import io.regulyn.identity.constants.TenantStatuses;
 import io.regulyn.identity.dto.ApiKeyCreateRequest;
 import io.regulyn.identity.dto.ApiKeyCreateResponse;
+import io.regulyn.identity.dto.ApiKeyListItem;
 import io.regulyn.identity.dto.ApiKeyRevokeRequest;
 import io.regulyn.identity.dto.ApiKeyRevokeResponse;
 import io.regulyn.identity.dto.ApiKeyRotateResponse;
@@ -33,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -620,5 +622,24 @@ public class ApiKeyService {
         } catch (Exception e) {
             throw new IllegalStateException("SHA-256 not available", e);
         }
+    }
+
+    public List<ApiKeyListItem> listApiKeys() {
+        UUID tenantId = TenantContextHolder.getTenantId();
+        return apiKeyRepository.findByTenantId(tenantId).stream()
+            .map(key -> {
+                ApiKeyListItem item = new ApiKeyListItem();
+                item.setApiKeyId(key.getApiKeyId());
+                item.setKeyName(key.getKeyName());
+                item.setPrefix(key.getPrefix());
+                item.setEnabled(key.getEnabled());
+                item.setExpiresAt(key.getExpiresAt());
+                item.setLastUsedAt(key.getLastUsedAt());
+                item.setRevokedAt(key.getRevokedAt());
+                item.setCreatedAt(key.getCreatedAt());
+                item.setKeyVersion(key.getKeyVersion());
+                return item;
+            })
+            .collect(java.util.stream.Collectors.toList());
     }
 }

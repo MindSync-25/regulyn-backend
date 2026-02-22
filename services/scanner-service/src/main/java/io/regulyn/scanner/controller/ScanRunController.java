@@ -25,28 +25,28 @@ public class ScanRunController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<ScanRunResponse> createRun(@Valid @RequestBody CreateScanRunRequest request) {
         ScanRunResponse response = scanRunService.createRun(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/{runId}/execute")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<ScanRunResponse> executeRun(@PathVariable("runId") UUID runId) {
         ScanRunResponse response = scanRunService.executeRun(runId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{runId}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'OPERATOR', 'AUDITOR')")
     public ResponseEntity<ScanRunResponse> getRun(@PathVariable("runId") UUID runId) {
         ScanRunResponse response = scanRunService.getRun(runId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'OPERATOR', 'AUDITOR')")
     public ResponseEntity<Page<ScanRunResponse>> listRuns(
         @RequestParam(name = "status", required = false) String status,
         @RequestParam(name = "sourceId", required = false) UUID sourceId,

@@ -23,14 +23,14 @@ public class ScanSourceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<ScanSourceResponse> createSource(@Valid @RequestBody CreateScanSourceRequest request) {
         ScanSourceResponse response = scanSourceService.createSource(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'OPERATOR', 'AUDITOR')")
     public ResponseEntity<List<ScanSourceResponse>> listSources(
         @RequestParam(name = "status", required = false) String status,
         @RequestParam(name = "type", required = false) String type

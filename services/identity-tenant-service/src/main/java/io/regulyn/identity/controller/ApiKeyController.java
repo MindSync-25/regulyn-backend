@@ -2,6 +2,7 @@ package io.regulyn.identity.controller;
 
 import io.regulyn.identity.dto.ApiKeyCreateRequest;
 import io.regulyn.identity.dto.ApiKeyCreateResponse;
+import io.regulyn.identity.dto.ApiKeyListItem;
 import io.regulyn.identity.dto.ApiKeyRevokeRequest;
 import io.regulyn.identity.dto.ApiKeyRevokeResponse;
 import io.regulyn.identity.dto.ApiKeyRotateResponse;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -20,6 +22,12 @@ public class ApiKeyController {
 
     public ApiKeyController(ApiKeyService apiKeyService) {
         this.apiKeyService = apiKeyService;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
+    public ResponseEntity<List<ApiKeyListItem>> listApiKeys() {
+        return ResponseEntity.ok(apiKeyService.listApiKeys());
     }
 
     @PostMapping

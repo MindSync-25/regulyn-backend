@@ -31,7 +31,7 @@ public class RemediationTaskController {
     }
 
     @PostMapping("/runs/{runId}/tasks/generate")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasRole('TENANT_ADMIN')")
     public ResponseEntity<TaskGenerationResponse> generateTasks(
         @PathVariable("runId") UUID runId,
         @RequestBody(required = false) TaskGenerationRequest request
@@ -42,7 +42,7 @@ public class RemediationTaskController {
     }
 
     @GetMapping("/tasks")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'OPERATOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'OPERATOR', 'AUDITOR')")
     public ResponseEntity<Page<RemediationTaskResponse>> listTasks(
         @RequestParam(name = "status", required = false) String status,
         @RequestParam(name = "sourceId", required = false) UUID sourceId,
@@ -59,13 +59,13 @@ public class RemediationTaskController {
     }
 
     @GetMapping("/tasks/{taskId}")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'AUDITOR', 'OPERATOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER', 'OPERATOR', 'AUDITOR')")
     public ResponseEntity<RemediationTaskResponse> getTask(@PathVariable("taskId") UUID taskId) {
         return ResponseEntity.ok(taskService.getTask(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/transition")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'OPERATOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER')")
     public ResponseEntity<RemediationTaskResponse> transitionTask(
         @PathVariable("taskId") UUID taskId,
         @Valid @RequestBody TaskTransitionRequest request,
@@ -77,7 +77,7 @@ public class RemediationTaskController {
     }
 
     @PostMapping("/tasks/{taskId}/events")
-    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'OPERATOR', 'CONNECTOR_AGENT')")
+    @PreAuthorize("hasAnyRole('TENANT_ADMIN', 'DPO', 'REVIEWER')")
     public ResponseEntity<RemediationTaskResponse> addTaskEvent(
         @PathVariable("taskId") UUID taskId,
         @Valid @RequestBody TaskEventRequest request,

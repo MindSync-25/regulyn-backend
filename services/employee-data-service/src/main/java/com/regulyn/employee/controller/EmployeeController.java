@@ -47,8 +47,8 @@ public class EmployeeController {
 
     @GetMapping("/employees")
     public ResponseEntity<List<EmployeeResponse>> listEmployees(
-            @RequestParam(required = false) String q,
-            @RequestParam(required = false) EmployeeStatus status) {
+            @RequestParam(name = "q", required = false) String q,
+            @RequestParam(name = "status", required = false) EmployeeStatus status) {
         List<EmployeeResponse> employees = employeeService.listEmployees(q, status);
         return ResponseEntity.ok(employees);
     }
@@ -77,10 +77,10 @@ public class EmployeeController {
 
     @GetMapping("/employee-data-records")
     public ResponseEntity<List<EmployeeDataRecordResponse>> listEmployeeDataRecords(
-            @RequestParam(required = false) UUID employeeId,
-            @RequestParam(required = false) DataCategory dataCategory,
-            @RequestParam(required = false) UUID hrPurposeId,
-            @RequestParam(required = false) UUID systemId) {
+            @RequestParam(name = "employeeId", required = false) UUID employeeId,
+            @RequestParam(name = "dataCategory", required = false) DataCategory dataCategory,
+            @RequestParam(name = "hrPurposeId", required = false) UUID hrPurposeId,
+            @RequestParam(name = "systemId", required = false) UUID systemId) {
         List<EmployeeDataRecordResponse> records = employeeService.listEmployeeDataRecords(
                 employeeId, dataCategory, hrPurposeId, systemId);
         return ResponseEntity.ok(records);
@@ -135,11 +135,11 @@ public class EmployeeController {
 
     @GetMapping("/employee-requests")
     public ResponseEntity<Page<EmployeeRequestResponse>> listEmployeeRequests(
-            @RequestParam(required = false) RequestStatus status,
-            @RequestParam(required = false) RequestType requestType,
-            @RequestParam(required = false) UUID employeeId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(name = "status", required = false) RequestStatus status,
+            @RequestParam(name = "requestType", required = false) RequestType requestType,
+            @RequestParam(name = "employeeId", required = false) UUID employeeId,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         Page<EmployeeRequestResponse> requests = employeeRequestService.listRequests(
                 status, requestType, employeeId, pageable);
